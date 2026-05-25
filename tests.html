@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculator 單元測試</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", monospace;
+    padding: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    background: #1a1a1a;
+    color: #d0d0d0;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; color: #fff; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 20px; }
+  .summary {
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .summary.pass { background: #1f8f4f; color: #fff; }
+  .summary.fail { background: #d4302a; color: #fff; }
+  .summary.loading { background: #444; color: #fff; }
+  table { width: 100%; border-collapse: collapse; background: #2a2a2a; border-radius: 4px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1a1a1a; font-size: 13px; vertical-align: top; }
+  th { background: #333; color: #fff; font-weight: 600; font-size: 12px; }
+  tr.pass td.icon { color: #4caf6a; font-weight: bold; }
+  tr.fail { background: #3a1a1a; }
+  tr.fail td.icon { color: #ff5050; font-weight: bold; font-size: 16px; }
+  tr.group td {
+    background: #1f1f1f;
+    color: #c0c0c0;
+    font-weight: 600;
+    padding: 12px 14px;
+    border-top: 1px solid #444;
+    font-size: 13px;
+  }
+  .mono { font-family: "SF Mono", Monaco, Consolas, "Courier New", monospace; font-size: 12px; }
+  .actual { color: #aaa; word-break: break-all; }
+  .actual.diff { color: #ff8080; font-weight: 600; }
+  .expected { color: #88a; word-break: break-all; }
+  .note {
+    margin-top: 18px;
+    padding: 12px 16px;
+    background: #2a2a2a;
+    border-left: 3px solid #888;
+    border-radius: 2px;
+    font-size: 12px;
+    color: #aaa;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+<h1>Calculator 單元測試</h1>
+<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize)</div>
+<div id="summary" class="summary loading">載入中…</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:50px">結果</th>
+      <th>測試</th>
+      <th style="width:25%">預期</th>
+      <th style="width:25%">實際</th>
+    </tr>
+  </thead>
+  <tbody id="resultsBody"></tbody>
+</table>
+
+<div class="note">
+  ※ 此頁透過 iframe 載入 index.html,讀取 <code>window.__calc</code> 暴露的純函數來測試。<br>
+  ※ 涵蓋所有計算邏輯;UI 互動(reset/copy/snap 按鈕、localStorage、滾輪、direction 切換)需手動驗證。<br>
+  ※ 浮點運算的測試用近似比對 (tol = 1e-3 或 1e-9 依情境)。
+</div>
+
+<iframe id="calc" src="index.html" style="display:none"></iframe>
+
+<script>
+  const results = [];
+  let passCount = 0, failCount = 0;
+
+  function approxEq(a, b, tol) {
+    if (typeof a !== 'number' || typeof b !== 'number') return a === b;
+    return Math.abs(a - b) <= tol;
+  }
+  function deepEq(a, b) {
+    if (a === b) return true;
+    if (a && b && typeof a === 'object' && typeof b === 'object') {
+      return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return false;
+  }
+  function assert(name, actual, expected, opts) {
+    opts = opts || {};
+    let pass;
+    if (opts.approx) pass = approxEq(actual, expected, opts.tol || 1e-6);
+    else if (expected !== null && typeof expected === 'object') pass = deepEq(actual, expected);
+    else pass = actual === expected;
+    results.push({ name, expected, actual, pass });
+    if (pass) passCount++; else failCount++;
+  }
+  function group(name) { results.push({ group: name }); }
+
+  document.getElementById('calc').onload = () => {
+    try {
+      const C = document.getElementById('calc').contentWindow.__calc;
+      if (!C) {
+        showError('index.html 沒有暴露 window.__calc — 請確認 export 區塊存在');
+        return;
+      }
+      runTests(C);
+      render();
+    } catch (e) {
+      showError('測試執行錯誤: ' + e.message);
+      console.error(e);
+    }
+  };
+
+  function showError(msg) {
+    const s = document.getElementById('summary');
+    s.textContent = msg;
+    s.className = 'summary fail';
+  }
+
+  function runTests(C) {
+    const { fmtNum, fmtMoney, round2, getTickSize, calcFee, calcSide,
+            calcBreakeven, calcTargetPrice, snapPriceToTick, FEE_RATE, TAX_RATES } = C;
+
+    // ============================================================
+    group('fmtMoney — 金額格式化');
+    // ============================================================
+    assert('NaN → "-"', fmtMoney(NaN), '-');
+    assert('Infinity → "-"', fmtMoney(Infinity), '-');
+    assert('0 → "NT$ 0"', fmtMoney(0), 'NT$ 0');
+    assert('100 → "NT$ 100"', fmtMoney(100), 'NT$ 100');
+    assert('100.5 → "NT$ 100.50" (有小數時自動 2dp)', fmtMoney(100.5), 'NT$ 100.50');
+    assert('-50 → "-NT$ 50"', fmtMoney(-50), '-NT$ 50');
+    assert('-50.5 → "-NT$ 50.50"', fmtMoney(-50.5), '-NT$ 50.50');
+    assert('千分位逗號', fmtMoney(1234567), 'NT$ 1,234,567');
+    assert('5e-7 < 1e-6 門檻 → 視為整數', fmtMoney(100 + 5e-7), 'NT$ 100');
+    assert('explicit dp=2', fmtMoney(100, 2), 'NT$ 100.00');
+
+    // ============================================================
+    group('fmtNum');
+    // ============================================================
+    assert('NaN → "-"', fmtNum(NaN), '-');
+    assert('1234.5 with 2dp', fmtNum(1234.5, 2), '1,234.50');
+
+    // ============================================================
+    group('round2 — 四捨五入到 2 位小數');
+    // ============================================================
+    assert('100.123 → 100.12', round2(100.123), 100.12);
+    assert('100.126 → 100.13', round2(100.126), 100.13);
+    assert('0 → 0', round2(0), 0);
+    assert('-50.55 → -50.55', round2(-50.55), -50.55, { approx: true, tol: 1e-9 });
+
+    // ============================================================
+    group('getTickSize — 一般股票升降單位');
+    // ============================================================
+    assert('5 → 0.01 (< 10)', getTickSize(5, 'stock'), 0.01);
+    assert('10 → 0.05 (邊界)', getTickSize(10, 'stock'), 0.05);
+    assert('49.99 → 0.05', getTickSize(49.99, 'stock'), 0.05);
+    assert('50 → 0.10 (邊界)', getTickSize(50, 'stock'), 0.10);
+    assert('99.99 → 0.10', getTickSize(99.99, 'stock'), 0.10);
+    assert('100 → 0.50 (邊界)', getTickSize(100, 'stock'), 0.50);
+    assert('499.99 → 0.50', getTickSize(499.99, 'stock'), 0.50);
+    assert('500 → 1.00 (邊界)', getTickSize(500, 'stock'), 1.00);
+    assert('999.99 → 1.00', getTickSize(999.99, 'stock'), 1.00);
+    assert('1000 → 5.00 (邊界)', getTickSize(1000, 'stock'), 5.00);
+
+    // ============================================================
+    group('getTickSize — ETF (兩段制)');
+    // ============================================================
+    assert('49.99 → 0.01', getTickSize(49.99, 'etf'), 0.01);
+    assert('50 → 0.05 (邊界)', getTickSize(50, 'etf'), 0.05);
+    assert('1000 ETF 不分高價段', getTickSize(1000, 'etf'), 0.05);
+
+    // ============================================================
+    group('calcFee — 手續費 (floor + minFee)');
+    // ============================================================
+    assert('amount=0 → 0', calcFee(0, 1, 20), 0);
+    assert('amount<0 → 0', calcFee(-100, 1, 20), 0);
+    assert('微量交易 → minFee 觸發', calcFee(100, 1, 20), 20);
+    assert('100k 原價 → 142 (floor 142.5)', calcFee(100000, 1, 20), 142);
+    assert('100k 5折 → 71', calcFee(100000, 0.5, 20), 71);
+    assert('50k × 2.8折 = 19.95 → minFee 20', calcFee(50000, 0.28, 20), 20);
+    assert('minFee=0 → 純比例', calcFee(100000, 1, 0), 142);
+    assert('恰好等於 minFee', calcFee(14036, 1, 20), 20);
+
+    // ============================================================
+    group('calcSide — 買進 (做多進場)');
+    // ============================================================
+    {
+      const r = calcSide(100, 1000, 1, 20, 0.003, 0, false);
+      assert('amount = 100 × 1000', r.amount, 100000);
+      assert('fee = 142', r.fee, 142);
+      assert('buy 不收稅', r.tax, 0);
+      assert('long 無借券費', r.borrowFee, 0);
+    }
+
+    // ============================================================
+    group('calcSide — 賣出 (做多出場,含證交稅)');
+    // ============================================================
+    {
+      const r = calcSide(110, 1000, 1, 20, 0.003, 0, true);
+      assert('amount = 110 × 1000', r.amount, 110000);
+      assert('fee = 156 (floor 156.75)', r.fee, 156);
+      assert('tax = 330 (110k × 0.3%)', r.tax, 330);
+      assert('long 無借券', r.borrowFee, 0);
+    }
+
+    // ============================================================
+    group('calcSide — 放空 (含借券費)');
+    // ============================================================
+    {
+      const r = calcSide(100, 1000, 1, 20, 0.003, 0.0008, true);
+      assert('borrow = floor(100k × 0.0008) = 80', r.borrowFee, 80);
+    }
+    {
+      const r = calcSide(100, 1000, 1, 20, 0.003, 0.0008 / 365, true);
+      assert('短天期 0.219 → floor = 0', r.borrowFee, 0);
+    }
+
+    // ============================================================
+    group('calcBreakeven — 做多損益兩平賣價');
+    // ============================================================
+    {
+      // 1 張 stock 進場 100,fee=142,totalCost=100,142
+      const be = calcBreakeven({ totalCost: 100142, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'long' });
+      assert('一般情境 ≈ 100.587', be, 100.5871, { approx: true, tol: 0.001 });
+    }
+    {
+      // 100 股零股 @ 100,2.8折 → fee 為 minFee=20,totalCost=10,020
+      const be = calcBreakeven({ totalCost: 10020, shares: 100, discount: 0.28, minFee: 20, taxRate: 0.003, dir: 'long' });
+      assert('零股 + 觸發 minFee fallback ≈ 100.702', be, 100.7021, { approx: true, tol: 0.001 });
+    }
+    {
+      const be = calcBreakeven({ totalCost: 100, shares: 0, discount: 1, minFee: 20, taxRate: 0.003, dir: 'long' });
+      assert('shares=0 → 0', be, 0);
+    }
+    {
+      const be = calcBreakeven({ totalCost: 100142, shares: 1000, discount: 1, minFee: 20, taxRate: 0, dir: 'long' });
+      assert('免稅商品 ≈ 100.285', be, 100.2849, { approx: true, tol: 0.001 });
+    }
+
+    // ============================================================
+    group('calcBreakeven — 做空損益兩平回補價');
+    // ============================================================
+    {
+      // 放空 1 張 stock @ 100,netSell = 99,558
+      const be = calcBreakeven({ netSell: 99558, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short' });
+      assert('一般情境 ≈ 99.416', be, 99.4164, { approx: true, tol: 0.001 });
+    }
+    {
+      const be = calcBreakeven({ netSell: 0, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short' });
+      assert('netSell=0 → 0', be, 0);
+    }
+    {
+      const be = calcBreakeven({ netSell: -100, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short' });
+      assert('netSell<0 → 0', be, 0);
+    }
+
+    // ============================================================
+    group('calcTargetPrice — 做多目標報酬反推');
+    // ============================================================
+    {
+      const p = calcTargetPrice({ totalCost: 100142, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'long', targetRate: 0.05 });
+      assert('5% target ≈ 105.616', p, 105.6164, { approx: true, tol: 0.001 });
+    }
+    {
+      const p = calcTargetPrice({ totalCost: 100142, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'long', targetRate: 0 });
+      assert('0% target = breakeven (≈ 100.587)', p, 100.5871, { approx: true, tol: 0.001 });
+    }
+    {
+      const p = calcTargetPrice({ totalCost: 100142, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'long', targetRate: -0.05 });
+      assert('-5% target ≈ 95.558', p, 95.5578, { approx: true, tol: 0.01 });
+    }
+
+    // ============================================================
+    group('calcTargetPrice — 做空目標報酬反推');
+    // ============================================================
+    {
+      const p = calcTargetPrice({ netSell: 99558, sellAmount: 100000, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short', targetRate: 0.05 });
+      assert('5% target ≈ 94.423', p, 94.4234, { approx: true, tol: 0.001 });
+    }
+    {
+      const p = calcTargetPrice({ netSell: 99558, sellAmount: 100000, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short', targetRate: 2 });
+      assert('200% target 不可達 → 0', p, 0);
+    }
+    {
+      const p = calcTargetPrice({ netSell: 99558, sellAmount: 100000, shares: 0, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short', targetRate: 0.05 });
+      assert('shares=0 → 0', p, 0);
+    }
+
+    // ============================================================
+    group('snapPriceToTick — 對齊到合法價位');
+    // ============================================================
+    {
+      const s = snapPriceToTick(100.55, 'stock', 'long');
+      assert('long 100.55 → 101 (ceil tick 0.5)', s.value, 101, { approx: true, tol: 1e-9 });
+      assert('  decimals = 2 (tick<1)', s.decimals, 2);
+    }
+    {
+      const s = snapPriceToTick(100.55, 'stock', 'short');
+      assert('short 100.55 → 100.5 (floor tick 0.5)', s.value, 100.5, { approx: true, tol: 1e-9 });
+    }
+    {
+      const s = snapPriceToTick(45.123, 'stock', 'long');
+      assert('long 45.123 → 45.15 (ceil tick 0.05)', s.value, 45.15, { approx: true, tol: 1e-9 });
+    }
+    {
+      const s = snapPriceToTick(100.5, 'stock', 'long');
+      assert('long 100.5 已對齊 → 100.5', s.value, 100.5, { approx: true, tol: 1e-9 });
+    }
+    {
+      const s = snapPriceToTick(50, 'etf', 'long');
+      assert('ETF 50 → 50 (tick 0.05)', s.value, 50, { approx: true, tol: 1e-9 });
+    }
+    {
+      const s = snapPriceToTick(1003, 'stock', 'long');
+      assert('long 1003 → 1005 (ceil tick 5)', s.value, 1005);
+      assert('  decimals = 0 (tick≥1)', s.decimals, 0);
+    }
+    {
+      const s = snapPriceToTick(9.99, 'stock', 'short');
+      assert('short 9.99 → 9.99 (floor tick 0.01)', s.value, 9.99, { approx: true, tol: 1e-9 });
+    }
+
+    // ============================================================
+    group('常數定義');
+    // ============================================================
+    assert('FEE_RATE = 0.001425', FEE_RATE, 0.001425);
+    assert('TAX stock = 0.3%', TAX_RATES.stock, 0.003);
+    assert('TAX ETF = 0.1%', TAX_RATES.etf, 0.001);
+    assert('TAX 當沖 = 0.15%', TAX_RATES.daytrade, 0.0015);
+    assert('TAX 免稅 = 0%', TAX_RATES.none, 0);
+
+    // ============================================================
+    group('端對端驗算 — 做多獲利 (1 張 100→110 stock)');
+    // ============================================================
+    {
+      const buy = calcSide(100, 1000, 1, 20, 0.003, 0, false);
+      const sell = calcSide(110, 1000, 1, 20, 0.003, 0, true);
+      const totalCost = round2(buy.amount + buy.fee);
+      const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+      const profit = round2(netSell - totalCost);
+      const returnRate = profit / totalCost * 100;
+
+      assert('totalCost = 100,142', totalCost, 100142);
+      assert('netSell = 109,514', netSell, 109514);
+      assert('profit = 9,372', profit, 9372);
+      assert('return ≈ 9.36%', returnRate, 9.3587, { approx: true, tol: 0.01 });
+    }
+
+    // ============================================================
+    group('端對端驗算 — 做空獲利 (1 張 100→90 stock,借券 1 天)');
+    // ============================================================
+    {
+      const borrowEff = 0.0008 * 1 / 365;
+      const sell = calcSide(100, 1000, 1, 20, 0.003, borrowEff, true);
+      const buy = calcSide(90, 1000, 1, 20, 0.003, 0, false);
+      const totalCost = round2(buy.amount + buy.fee);
+      const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+      const profit = round2(netSell - totalCost);
+      const returnRate = profit / sell.amount * 100;  // 做空用 sellAmount 當基準
+
+      assert('sellAmount = 100,000', sell.amount, 100000);
+      assert('netSell = 99,558', netSell, 99558);  // 100k - 142 - 300 - 0
+      assert('回補 totalCost = 90,128', totalCost, 90128);
+      assert('profit = 9,430', profit, 9430);
+      assert('return ≈ 9.43%', returnRate, 9.43, { approx: true, tol: 0.01 });
+    }
+  }
+
+  function render() {
+    const body = document.getElementById('resultsBody');
+    body.innerHTML = results.map(r => {
+      if (r.group) return `<tr class="group"><td colspan="4">${escapeHtml(r.group)}</td></tr>`;
+      const ev = formatVal(r.expected);
+      const av = formatVal(r.actual);
+      return `<tr class="${r.pass ? 'pass' : 'fail'}">
+        <td class="icon">${r.pass ? '✓' : '✗'}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td class="mono expected">${escapeHtml(ev)}</td>
+        <td class="mono actual ${r.pass ? '' : 'diff'}">${escapeHtml(av)}</td>
+      </tr>`;
+    }).join('');
+    const s = document.getElementById('summary');
+    const total = passCount + failCount;
+    s.textContent = `${total} 測試 · ${passCount} 通過 · ${failCount} 失敗`;
+    s.className = `summary ${failCount === 0 ? 'pass' : 'fail'}`;
+  }
+
+  function formatVal(v) {
+    if (v === undefined) return 'undefined';
+    if (v === null) return 'null';
+    if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toString();
+    return JSON.stringify(v);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+</script>
+</body>
+</html>

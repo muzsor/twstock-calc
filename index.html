@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="台股交易計算機 — 試算手續費、證交稅、借券費與實際損益。支援做多/做空、零股、ETF、現股當沖。純前端、零追蹤。">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="light dark">
+<title>台股交易計算機</title>
+<script>
+  // 早於 <style> 套用主題,避免初次載入閃光 (FOUC)
+  (function() {
+    try {
+      var mode = localStorage.getItem('twStockCalc.theme') || 'auto';
+      if (mode !== 'auto' && mode !== 'light' && mode !== 'dark') mode = 'auto';
+      var effective = mode === 'auto'
+        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : mode;
+      document.documentElement.setAttribute('data-theme', effective);
+      document.documentElement.setAttribute('data-theme-mode', mode);
+    } catch (_) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme-mode', 'auto');
+    }
+  })();
+</script>
+<!-- Open Graph / 社群分享 -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="台股交易計算機">
+<meta property="og:description" content="試算手續費、證交稅、借券費與實際損益。支援做多/做空、零股、ETF、現股當沖。純前端、零追蹤。">
+<meta property="og:locale" content="zh_TW">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="台股交易計算機">
+<meta name="twitter:description" content="試算手續費、證交稅、借券費與實際損益。">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>">
+<style>
+  /* ============================================================
+     Theme tokens — light is default, dark overrides via [data-theme="dark"]
+     台股紅漲綠跌色保留在兩個主題中
+     ============================================================ */
+  :root {
+    --bg-page: #f5f5f5;
+    --bg-card: #ffffff;
+    --bg-input: #fafafa;
+    --bg-highlight: #f0f0f0;
+    --bg-big: #f5f5f5;
+    --bg-btn: #ffffff;
+    --bg-btn-hover: #f5f5f5;
+    --bg-btn-active: #111111;
+    --bg-btn-active-hover: #333333;
+    --bg-primary: #2563eb;          /* blue-600 — 主要動作按鈕 */
+    --bg-primary-hover: #1d4ed8;    /* blue-700 */
+    --bg-btn-secondary: #e8e8e8;
+    --bg-btn-secondary-hover: #d8d8d8;
+    --bg-snap-label: #f0f0f0;
+
+    --border: #d0d0d0;
+    --border-hover: #888888;
+    --border-soft: #e0e0e0;
+    --border-dashed: #e0e0e0;
+    --border-strong: #111111;
+
+    --text-strong: #111111;
+    --text: #333333;
+    --text-secondary: #555555;
+    --text-muted: #777777;
+    --text-faint: #888888;
+    --text-on-active: #ffffff;
+    --text-on-bigbg: #111111;
+
+    --focus-ring: rgba(0, 0, 0, 0.12);
+    --shadow-toast: 0 4px 14px rgba(0, 0, 0, 0.15);
+
+    --profit-bg: #d4302a;
+    --profit-text: #d4302a;
+    --loss-bg: #1f8f4f;
+    --loss-text: #1f8f4f;
+  }
+
+  :root[data-theme="dark"] {
+    --bg-page: #000000;
+    --bg-card: #2e2e2e;
+    --bg-input: #1a1a1a;
+    --bg-highlight: #404040;
+    --bg-big: #000000;
+    --bg-btn: #1f1f1f;
+    --bg-btn-hover: #2a2a2a;
+    --bg-btn-active: #ffffff;
+    --bg-btn-active-hover: #d8d8d8;
+    --bg-primary: #3b82f6;          /* blue-500 — 深色模式略亮以維持對比 */
+    --bg-primary-hover: #2563eb;    /* blue-600 */
+    --bg-btn-secondary: #2a2a2a;
+    --bg-btn-secondary-hover: #3a3a3a;
+    --bg-snap-label: #1f1f1f;
+
+    --border: #4a4a4a;
+    --border-hover: #6a6a6a;
+    --border-soft: #444444;
+    --border-dashed: #444444;
+    --border-strong: #ffffff;
+
+    --text-strong: #ffffff;
+    --text: #d0d0d0;
+    --text-secondary: #c0c0c0;
+    --text-muted: #b8b8b8;
+    --text-faint: #888888;
+    --text-on-active: #111111;
+    --text-on-bigbg: #ffffff;
+
+    --focus-ring: rgba(255, 255, 255, 0.15);
+    --shadow-toast: 0 4px 14px rgba(0, 0, 0, 0.4);
+
+    --profit-text: #ff5050;
+    --loss-text: #4caf6a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+    background: var(--bg-page);
+    min-height: 100vh;
+    padding: 20px;
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  header { text-align: center; color: var(--text-strong); margin-bottom: 16px; }
+  header h1 { font-size: 30px; margin-bottom: 6px; font-weight: 700; letter-spacing: 2px; }
+  header p { color: var(--text-faint); font-size: 15px; }
+
+  .action-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  /* 分隔線:主題群組與動作按鈕之間 */
+  .action-bar .divider {
+    width: 1px;
+    height: 22px;
+    background: var(--border);
+  }
+  .btn-action {
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    background: var(--bg-btn);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-action:hover { border-color: var(--border-strong); color: var(--text-strong); }
+  .btn-action.primary {
+    background: var(--bg-primary);
+    color: #ffffff;
+    border-color: var(--bg-primary);
+  }
+  .btn-action.primary:hover { background: var(--bg-primary-hover); border-color: var(--bg-primary-hover); }
+
+  /* 主題切換 — iOS 風格 segmented pill
+     active 用「浮起的卡片」表達,而不是反相填色,
+     避免「淺色按鈕變黑」「深色按鈕變白」的視覺矛盾 */
+  .theme-toggle {
+    display: inline-flex;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .theme-toggle button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 11px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .theme-toggle button:hover:not(.active) {
+    color: var(--text-strong);
+    background: var(--bg-btn-hover);
+  }
+  .theme-toggle button.active {
+    background: var(--bg-card);
+    color: var(--text-strong);
+    font-weight: 600;
+    box-shadow: 0 1px 2px var(--focus-ring);
+  }
+  /* 主題標示小圓點 (在按鈕文字前) */
+  .theme-toggle button::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-shrink: 0;
+  }
+  .theme-toggle button[data-theme="light"]::before {
+    background: #ffffff;
+    border-color: #d0d0d0;
+  }
+  .theme-toggle button[data-theme="dark"]::before {
+    background: #111111;
+    border-color: #444444;
+  }
+  .theme-toggle button[data-theme="auto"]::before {
+    background: linear-gradient(135deg, #ffffff 0%, #ffffff 50%, #111111 50%, #111111 100%);
+    border-color: var(--border);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border-radius: 4px;
+    padding: 22px;
+    border: 1px solid var(--border-soft);
+  }
+  .card h2 {
+    font-size: 18px;
+    margin-bottom: 18px;
+    color: var(--text-strong);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .field input, .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 17px;
+    background: var(--bg-input);
+    transition: all 0.15s;
+    font-family: inherit;
+    color: var(--text-strong);
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* 快捷對齊 — 兩個視覺對等的卡片(左:單純按鈕;右:合一的輸入組) */
+  .snap-bar {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .snap-action {
+    flex: 1 1 140px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-btn);
+    color: var(--text-secondary);
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .snap-action:hover {
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+    background: var(--bg-btn-hover);
+  }
+  .snap-action:active { background: var(--bg-input); }
+
+  .snap-target {
+    flex: 1 1 220px;
+    min-height: 40px;
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--bg-btn);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .snap-target:hover { border-color: var(--border-hover); }
+  .snap-target:focus-within {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .snap-target .snap-label {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-snap-label);
+    white-space: nowrap;
+  }
+  .snap-target input[type=number] {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    border: none;
+    background: var(--bg-input);
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-strong);
+    padding: 0 4px;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .snap-target input[type=number]:focus { outline: none; box-shadow: none; }
+  /* 隱藏 spinner — 已有滾輪 + 套用按鈕,spinner 在無邊框 input 上不好看 */
+  .snap-target input[type=number]::-webkit-outer-spin-button,
+  .snap-target input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .snap-target input[type=number] { -moz-appearance: textfield; }
+  .snap-target .snap-pct {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 13px;
+    color: var(--text-faint);
+    background: var(--bg-input);
+  }
+  .snap-target button {
+    padding: 0 18px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: var(--bg-btn-secondary);
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .snap-target button:hover { background: var(--bg-btn-secondary-hover); }
+  .snap-target button:active { background: var(--bg-btn); }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    font-size: 15px;
+  }
+  .result-row .label { color: var(--text-muted); }
+  .result-row .value {
+    font-weight: 600;
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+  }
+  .result-row.sub {
+    padding: 4px 0 8px;
+    font-size: 13px;
+  }
+  .result-row.sub .label { color: var(--text-faint); padding-left: 14px; }
+  .result-row.sub .value { color: var(--text-secondary); font-weight: 500; }
+
+  .result-section {
+    border-bottom: 1px dashed var(--border-dashed);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .result-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .result-row.highlight {
+    background: var(--bg-highlight);
+    margin: 6px -10px;
+    padding: 10px;
+    border-radius: 2px;
+    border-left: 3px solid var(--border-strong);
+  }
+  .result-row.big {
+    padding: 14px 10px;
+    margin: 8px -10px 4px;
+    background: var(--bg-big);
+    border-radius: 2px;
+    font-size: 16px;
+  }
+  .result-row.big .label { font-weight: 600; color: var(--text-on-bigbg); }
+  .result-row.big .value { font-size: 24px; font-weight: 700; color: var(--text-on-bigbg); }
+  .result-row.profit .value { color: var(--profit-text); }
+  .result-row.loss .value { color: var(--loss-text); }
+  .result-row.big.profit { background: var(--profit-bg); }
+  .result-row.big.loss { background: var(--loss-bg); }
+  .result-row.big.profit .label,
+  .result-row.big.loss .label,
+  .result-row.big.profit .value,
+  .result-row.big.loss .value { color: #fff; }
+
+  .help {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 4px;
+    line-height: 1.6;
+  }
+  .btn-group {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .btn-group button {
+    flex: 1;
+    min-width: 60px;
+    padding: 8px 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-btn);
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn-group button:hover { border-color: var(--border-strong); color: var(--text-strong); }
+  .btn-group button.active {
+    background: var(--bg-btn-active);
+    color: var(--text-on-active);
+    border-color: var(--bg-btn-active);
+  }
+  .footer-note {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-top: 18px;
+    line-height: 1.8;
+  }
+
+  .toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: var(--loss-bg);
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    z-index: 1000;
+    box-shadow: var(--shadow-toast);
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast.err { background: var(--profit-bg); }
+
+  @media (max-width: 760px) {
+    body { padding: 12px; }
+    .layout { grid-template-columns: 1fr; gap: 14px; }
+    .row { grid-template-columns: 1fr; }
+    header h1 { font-size: 24px; }
+    .card { padding: 18px; }
+    .result-row.big .value { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>台股交易計算機</h1>
+      <p>試算手續費、證交稅與實際損益</p>
+    </header>
+
+    <div class="action-bar">
+      <div class="theme-toggle" id="themeGroup" role="group" aria-label="顯示主題">
+        <button type="button" data-theme="auto" aria-pressed="true">跟隨系統</button>
+        <button type="button" data-theme="light" aria-pressed="false">淺色</button>
+        <button type="button" data-theme="dark" aria-pressed="false">深色</button>
+      </div>
+      <span class="divider" aria-hidden="true"></span>
+      <button type="button" id="resetBtn" class="btn-action">重置預設</button>
+      <button type="button" id="copyBtn" class="btn-action primary">複製結果</button>
+    </div>
+
+    <div class="layout">
+      <div class="card">
+        <h2>交易條件</h2>
+
+        <div class="field">
+          <label>交易方向</label>
+          <div class="btn-group" id="directionGroup" role="group" aria-label="交易方向">
+            <button type="button" data-dir="long" class="active" aria-pressed="true">做多 (買低賣高)</button>
+            <button type="button" data-dir="short" aria-pressed="false">做空 (賣高買低)</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label id="buyPriceLabel" for="buyPrice">買進價格 (元)</label>
+            <input type="number" id="buyPrice" value="100" step="0.5" min="0" inputmode="decimal">
+            <div class="help" id="buyTickHint">升降單位 NT$ 0.50</div>
+          </div>
+          <div class="field">
+            <label id="sellPriceLabel" for="sellPrice">賣出價格 (元)</label>
+            <input type="number" id="sellPrice" value="110" step="0.5" min="0" inputmode="decimal">
+            <div class="help" id="sellTickHint">升降單位 NT$ 0.50</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>快捷對齊</label>
+          <div class="snap-bar">
+            <button type="button" id="snapBreakeven" class="snap-action">對齊損益兩平</button>
+            <div class="snap-target">
+              <span class="snap-label">目標報酬</span>
+              <input type="number" id="targetReturn" value="5" step="0.5" inputmode="decimal" aria-label="目標報酬率百分比">
+              <span class="snap-pct">%</span>
+              <button type="button" id="snapTarget">套用</button>
+            </div>
+          </div>
+          <div class="help">會把另一邊的價格自動帶到 ≥ 目標的合法升降單位</div>
+        </div>
+
+        <div class="field">
+          <label for="quantity">交易數量</label>
+          <input type="number" id="quantity" value="1" step="1" min="0" inputmode="numeric">
+          <div class="btn-group" id="unitGroup" role="group" aria-label="數量單位">
+            <button type="button" data-unit="lot" class="active" aria-pressed="true">張 (1000股)</button>
+            <button type="button" data-unit="share" aria-pressed="false">股 (零股)</button>
+          </div>
+          <div class="btn-group" id="qtyPresets"></div>
+        </div>
+
+        <div class="field">
+          <label for="productType">商品類型 (證交稅率)</label>
+          <select id="productType">
+            <option value="stock">一般股票 — 0.3%</option>
+            <option value="etf">ETF — 0.1%</option>
+            <option value="daytrade">現股當沖 — 0.15%</option>
+            <option value="none">無證交稅</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="discount">手續費折扣 (券商給的折數)</label>
+          <input type="number" id="discount" value="1" step="0.01" min="0.01" max="1" inputmode="decimal">
+          <div class="btn-group" id="discountGroup" role="group" aria-label="手續費折扣">
+            <button type="button" data-discount="1" class="active" aria-pressed="true">原價</button>
+            <button type="button" data-discount="0.6" aria-pressed="false">6折</button>
+            <button type="button" data-discount="0.5" aria-pressed="false">5折</button>
+            <button type="button" data-discount="0.38" aria-pressed="false">3.8折</button>
+            <button type="button" data-discount="0.28" aria-pressed="false">2.8折</button>
+          </div>
+          <div class="help">手續費 = 成交金額 × 0.1425% × 折數,最低 20 元</div>
+        </div>
+
+        <div class="field">
+          <label for="minFee">最低手續費 (元)</label>
+          <input type="number" id="minFee" value="20" step="1" min="0" inputmode="numeric">
+          <div class="help">多數券商最低 20 元,部分電子下單可降至 1 元或不設下限</div>
+        </div>
+
+        <div class="row" id="borrowField" style="display:none">
+          <div class="field" style="margin-bottom:0">
+            <label for="borrowRate">借券費率 (年化 %)</label>
+            <input type="number" id="borrowRate" value="0.08" step="0.01" min="0" inputmode="decimal">
+            <div class="help">融券放空券商收取,約年化 0.08%~0.1%</div>
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label for="borrowDays">持有天數</label>
+            <input type="number" id="borrowDays" value="1" step="1" min="0" inputmode="numeric">
+            <div class="help">借券費 = 成交金額 × 年化率 × 天數 / 365</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" aria-live="polite" aria-atomic="false">
+        <h2>計算結果</h2>
+
+        <div class="result-section">
+          <div class="result-row">
+            <span class="label">買進金額</span>
+            <span class="value" id="buyAmount">-</span>
+          </div>
+          <div class="result-row">
+            <span class="label">買進手續費</span>
+            <span class="value" id="buyFee">-</span>
+          </div>
+          <div class="result-row highlight">
+            <span class="label">買進總成本</span>
+            <span class="value" id="totalCost">-</span>
+          </div>
+          <div class="result-row sub">
+            <span class="label">└ 每股實際成本</span>
+            <span class="value" id="costPerShare">-</span>
+          </div>
+        </div>
+
+        <div class="result-section">
+          <div class="result-row">
+            <span class="label">賣出金額</span>
+            <span class="value" id="sellAmount">-</span>
+          </div>
+          <div class="result-row">
+            <span class="label">賣出手續費</span>
+            <span class="value" id="sellFee">-</span>
+          </div>
+          <div class="result-row">
+            <span class="label">證交稅</span>
+            <span class="value" id="tax">-</span>
+          </div>
+          <div class="result-row" id="borrowFeeRow" style="display:none">
+            <span class="label">借券費</span>
+            <span class="value" id="borrowFee">-</span>
+          </div>
+          <div class="result-row highlight">
+            <span class="label">賣出淨收入</span>
+            <span class="value" id="netSell">-</span>
+          </div>
+          <div class="result-row sub">
+            <span class="label">└ 每股實際淨收</span>
+            <span class="value" id="netPerShare">-</span>
+          </div>
+        </div>
+
+        <div class="result-section">
+          <div class="result-row big" id="profitRow">
+            <span class="label">損益</span>
+            <span class="value" id="profit">-</span>
+          </div>
+          <div class="result-row" id="returnRow">
+            <span class="label">報酬率</span>
+            <span class="value" id="returnRate">-</span>
+          </div>
+          <div class="result-row">
+            <span class="label" id="breakevenLabel">損益兩平賣價</span>
+            <span class="value" id="breakeven">-</span>
+          </div>
+          <div class="result-row">
+            <span class="label">總交易成本 (手續費+稅)</span>
+            <span class="value" id="totalFees">-</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      ※ 本工具僅供試算參考,<strong>不構成任何投資建議</strong><br>
+      ※ 手續費以各券商實際收取為準,最低手續費可自行調整<br>
+      ※ 現股當沖證交稅減半至 2027/12/31 止 (政策可能變更,請以最新法規為準)<br>
+      ※ 借券費率因券商與商品而異,實際以證商規定為準<br>
+      ※ 開發者不對計算結果之準確性負任何責任,實際損益以券商交割單為主
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const STORAGE_KEY = 'twStockCalc.settings.v1';
+  const THEME_KEY = 'twStockCalc.theme';  // 主題獨立 key (供 head 內早於 style 的 script 讀取)
+  // 只記憶「設定類」欄位,試算情境(價格、數量)每次都是新試算,不存
+  const PERSIST_KEYS = ['direction', 'unit', 'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
+  const DEFAULTS = {
+    direction: 'long', unit: 'lot',
+    buyPrice: 100, sellPrice: 110, quantity: 1,
+    productType: 'stock', discount: 1, minFee: 20,
+    borrowRate: 0.08, borrowDays: 1, targetReturn: 5,
+  };
+  const TAX_RATES = { stock: 0.003, etf: 0.001, daytrade: 0.0015, none: 0 };
+  const FEE_RATE = 0.001425;
+  const THEME_COLORS = { light: '#f5f5f5', dark: '#000000' };  // 對應 meta theme-color
+
+  let unit = DEFAULTS.unit;
+  let direction = DEFAULTS.direction;
+  // 從 <head> 早於 style 的 init script 已設好 data-theme-mode,讀回來避免雙重邏輯
+  let themeMode = document.documentElement.getAttribute('data-theme-mode') || 'auto';
+
+  // ============================================================
+  // 格式化
+  // ============================================================
+  function fmtNum(n, dp) {
+    if (!isFinite(n) || isNaN(n)) return '-';
+    return n.toLocaleString('zh-TW', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  }
+  function fmtMoney(n, dp) {
+    if (!isFinite(n) || isNaN(n)) return '-';
+    const sign = n < 0 ? '-' : '';
+    const abs = Math.abs(n);
+    if (dp === undefined || dp === null) {
+      // 嚴格判斷:小於 1e-6 才視為整數,避免漏顯示真的有小數的金額
+      const hasDecimal = Math.abs(abs - Math.round(abs)) > 1e-6;
+      dp = hasDecimal ? 2 : 0;
+    }
+    return sign + 'NT$ ' + fmtNum(abs, dp);
+  }
+  const round2 = n => Math.round(n * 100) / 100;
+
+  // ============================================================
+  // 升降單位 (tick)
+  // ============================================================
+  function getTickSize(price, productType) {
+    if (productType === 'etf') return price < 50 ? 0.01 : 0.05;
+    if (price < 10) return 0.01;
+    if (price < 50) return 0.05;
+    if (price < 100) return 0.10;
+    if (price < 500) return 0.50;
+    if (price < 1000) return 1.00;
+    return 5.00;
+  }
+
+  // ============================================================
+  // 共用計算 helper
+  // ============================================================
+  function readInputs() {
+    let discount = parseFloat($('discount').value);
+    if (!isFinite(discount) || discount <= 0) discount = 1;
+    if (discount > 1) discount = 1;
+
+    const qty = Math.max(0, parseFloat($('quantity').value) || 0);
+    const days = Math.max(0, parseFloat($('borrowDays').value) || 0);
+    const annualBorrowRate = Math.max(0, (parseFloat($('borrowRate').value) || 0) / 100);
+
+    return {
+      buyPrice: Math.max(0, parseFloat($('buyPrice').value) || 0),
+      sellPrice: Math.max(0, parseFloat($('sellPrice').value) || 0),
+      shares: (unit === 'lot' ? 1000 : 1) * qty,
+      discount,
+      minFee: Math.max(0, parseFloat($('minFee').value) || 0),
+      productType: $('productType').value,
+      taxRate: TAX_RATES[$('productType').value] ?? 0.003,
+      // 實際借券費率 = 年化費率 × 天數 / 365,做多時為 0
+      borrowEffRate: direction === 'short' ? annualBorrowRate * days / 365 : 0,
+    };
+  }
+
+  // 計算手續費 (含最低門檻、無條件捨去)
+  function calcFee(amount, discount, minFee) {
+    if (amount <= 0) return 0;
+    return Math.max(minFee, Math.floor(amount * FEE_RATE * discount));
+  }
+
+  // 計算單邊的金額、手續費、稅、借券費
+  function calcSide(price, shares, discount, minFee, taxRate, borrowEffRate, isSell) {
+    const amount = round2(price * shares);
+    const fee = calcFee(amount, discount, minFee);
+    const tax = isSell ? Math.floor(amount * taxRate) : 0;
+    const borrowFee = isSell ? Math.floor(amount * borrowEffRate) : 0;
+    return { amount, fee, tax, borrowFee };
+  }
+
+  // 損益兩平價:做多 → 最低賣價;做空 → 最高回補價
+  // 公式假設賣方手續費按比例;若按比例 < minFee,改用最低門檻反推
+  function calcBreakeven({ totalCost, netSell, shares, discount, minFee, taxRate, dir }) {
+    if (shares <= 0) return 0;
+    if (dir === 'short') {
+      const factor = 1 + FEE_RATE * discount;
+      if (factor <= 0 || netSell <= 0) return 0;
+      let be = netSell / (shares * factor);
+      if (be * shares * FEE_RATE * discount < minFee) {
+        be = (netSell - minFee) / shares;
+      }
+      return be;
+    } else {
+      const factor = 1 - FEE_RATE * discount - taxRate;
+      if (factor <= 0) return 0;
+      let be = totalCost / (shares * factor);
+      if (be * shares * FEE_RATE * discount < minFee && (1 - taxRate) > 0) {
+        be = (totalCost + minFee) / (shares * (1 - taxRate));
+      }
+      return be;
+    }
+  }
+
+  // 達到指定報酬率所需的另一邊價格
+  //   做多: 鎖定 buyPrice/totalCost,求 sellPrice 使 profit = targetRate × totalCost
+  //   做空: 鎖定 sellPrice/netSell,求 buyPrice 使 profit = targetRate × sellAmount
+  function calcTargetPrice({ totalCost, netSell, sellAmount, shares, discount, minFee, taxRate, dir, targetRate }) {
+    if (shares <= 0) return 0;
+    if (dir === 'short') {
+      const targetProfit = targetRate * sellAmount;
+      const targetBuyTotal = netSell - targetProfit; // 回補方的總現金支出 (含手續費)
+      const factor = 1 + FEE_RATE * discount;
+      if (factor <= 0 || targetBuyTotal <= 0) return 0;
+      let price = targetBuyTotal / (shares * factor);
+      if (price * shares * FEE_RATE * discount < minFee) {
+        price = (targetBuyTotal - minFee) / shares;
+      }
+      return price;
+    } else {
+      const targetTotalIn = totalCost * (1 + targetRate); // 賣方需收回的金額 (扣費前)
+      const factor = 1 - FEE_RATE * discount - taxRate;
+      if (factor <= 0) return 0;
+      let price = targetTotalIn / (shares * factor);
+      if (price * shares * FEE_RATE * discount < minFee && (1 - taxRate) > 0) {
+        price = (targetTotalIn + minFee) / (shares * (1 - taxRate));
+      }
+      return price;
+    }
+  }
+
+  // 把價位對齊到合法 tick:做多賣價向上、做空回補價向下
+  function snapPriceToTick(price, productType, dir) {
+    const tick = getTickSize(price, productType);
+    const eps = 1e-9;
+    const aligned = dir === 'short'
+      ? Math.floor((price + eps) / tick) * tick
+      : Math.ceil((price - eps) / tick) * tick;
+    return { value: aligned, decimals: tick < 1 ? 2 : 0 };
+  }
+
+  // ============================================================
+  // UI 同步
+  // ============================================================
+  function renderQtyPresets() {
+    const presets = unit === 'lot' ? [1, 5, 10, 20, 50] : [1, 100, 500, 1000, 5000];
+    const cur = parseFloat($('quantity').value);
+    $('qtyPresets').innerHTML = presets.map(p => {
+      const active = Math.abs(p - cur) < 0.0001;
+      return '<button type="button" data-qty="' + p + '" aria-pressed="' + active + '"' +
+        (active ? ' class="active"' : '') + '>' + p + '</button>';
+    }).join('');
+  }
+
+  function updateTickSizes() {
+    const productType = $('productType').value;
+    const bp = parseFloat($('buyPrice').value) || 0;
+    const sp = parseFloat($('sellPrice').value) || 0;
+    const buyTick = getTickSize(bp, productType);
+    const sellTick = getTickSize(sp, productType);
+    $('buyPrice').step = buyTick;
+    $('sellPrice').step = sellTick;
+    $('buyTickHint').textContent = '升降單位 NT$ ' + buyTick.toFixed(2);
+    $('sellTickHint').textContent = '升降單位 NT$ ' + sellTick.toFixed(2);
+  }
+
+  function updateDirectionUI() {
+    if (direction === 'short') {
+      $('buyPriceLabel').textContent = '回補價格 (元)';
+      $('sellPriceLabel').textContent = '放空價格 (元)';
+      $('breakevenLabel').textContent = '損益兩平回補價';
+      $('borrowField').style.display = '';
+      $('borrowFeeRow').style.display = '';
+    } else {
+      $('buyPriceLabel').textContent = '買進價格 (元)';
+      $('sellPriceLabel').textContent = '賣出價格 (元)';
+      $('breakevenLabel').textContent = '損益兩平賣價';
+      $('borrowField').style.display = 'none';
+      $('borrowFeeRow').style.display = 'none';
+    }
+  }
+
+  function syncToggleGroups() {
+    [...$('directionGroup').children].forEach(b => {
+      const active = b.dataset.dir === direction;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active);
+    });
+    [...$('unitGroup').children].forEach(b => {
+      const active = b.dataset.unit === unit;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active);
+    });
+    const d = parseFloat($('discount').value);
+    [...$('discountGroup').children].forEach(b => {
+      const active = Math.abs(parseFloat(b.dataset.discount) - d) < 0.001;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active);
+    });
+    [...$('themeGroup').children].forEach(b => {
+      const active = b.dataset.theme === themeMode;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active);
+    });
+  }
+
+  // ============================================================
+  // 主題切換
+  //   themeMode: 'auto' | 'light' | 'dark'
+  //   - auto: 根據 prefers-color-scheme 自動決定,並監聽系統變化
+  //   - light/dark: 強制鎖定,不受系統影響
+  // 為避免 FOUC,初始套用由 <head> 內 inline script 處理;這裡負責切換與持久化。
+  // ============================================================
+  function applyTheme(mode) {
+    if (mode !== 'auto' && mode !== 'light' && mode !== 'dark') mode = 'auto';
+    themeMode = mode;
+    const effective = mode === 'auto'
+      ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : mode;
+    document.documentElement.setAttribute('data-theme', effective);
+    document.documentElement.setAttribute('data-theme-mode', mode);
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) metaThemeColor.setAttribute('content', THEME_COLORS[effective]);
+    try { localStorage.setItem(THEME_KEY, mode); } catch (_) {}
+    syncToggleGroups();
+  }
+
+  // 系統主題變化時,只在 auto 模式下跟著切
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (themeMode === 'auto') applyTheme('auto');
+  });
+
+  // ============================================================
+  // 主計算
+  // ============================================================
+  function calculate() {
+    updateTickSizes();
+    renderQtyPresets();
+    const inp = readInputs();
+    const { buyPrice, sellPrice, shares, discount, minFee, taxRate, borrowEffRate } = inp;
+
+    const buy = calcSide(buyPrice, shares, discount, minFee, taxRate, 0, false);
+    const totalCost = round2(buy.amount + buy.fee);
+
+    const sell = calcSide(sellPrice, shares, discount, minFee, taxRate, borrowEffRate, true);
+    const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+
+    const profit = round2(netSell - totalCost);
+    const basis = direction === 'short' ? sell.amount : totalCost;
+    const returnRate = basis > 0 ? (profit / basis * 100) : 0;
+    const totalFees = buy.fee + sell.fee + sell.tax + sell.borrowFee;
+
+    const breakeven = calcBreakeven({
+      totalCost, netSell, shares, discount, minFee, taxRate, dir: direction,
+    });
+
+    $('buyAmount').textContent     = fmtMoney(buy.amount);
+    $('buyFee').textContent        = fmtMoney(buy.fee);
+    $('totalCost').textContent     = fmtMoney(totalCost);
+    $('costPerShare').textContent  = shares > 0 ? 'NT$ ' + (totalCost / shares).toFixed(2) : '-';
+    $('sellAmount').textContent    = fmtMoney(sell.amount);
+    $('sellFee').textContent       = fmtMoney(sell.fee);
+    $('tax').textContent           = fmtMoney(sell.tax);
+    $('borrowFee').textContent     = fmtMoney(sell.borrowFee);
+    $('netSell').textContent       = fmtMoney(netSell);
+    $('netPerShare').textContent   = shares > 0 ? 'NT$ ' + (netSell / shares).toFixed(2) : '-';
+    $('totalFees').textContent     = fmtMoney(totalFees);
+    $('profit').textContent        = (profit > 0 ? '+' : '') + fmtMoney(profit);
+    $('returnRate').textContent    = (returnRate > 0 ? '+' : '') + (isFinite(returnRate) ? returnRate.toFixed(2) : '0.00') + '%';
+    $('breakeven').textContent     = breakeven > 0 ? 'NT$ ' + breakeven.toFixed(2) : '-';
+
+    const cls = profit >= 0 ? 'profit' : 'loss';
+    $('profitRow').className = 'result-row big ' + cls;
+    $('returnRow').className = 'result-row ' + cls;
+  }
+
+  // ============================================================
+  // 快捷:對齊損益兩平 / 套用目標報酬
+  // ============================================================
+  function snapToBreakeven() {
+    const inp = readInputs();
+    const { shares, productType, discount, minFee, taxRate, borrowEffRate } = inp;
+    if (shares <= 0) return toast('請先輸入交易數量', true);
+
+    if (direction === 'short') {
+      const sell = calcSide(inp.sellPrice, shares, discount, minFee, taxRate, borrowEffRate, true);
+      const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+      const be = calcBreakeven({ netSell, shares, discount, minFee, taxRate, dir: 'short' });
+      if (be <= 0) return toast('無法對齊到損益兩平', true);
+      const { value, decimals } = snapPriceToTick(be, productType, 'short');
+      $('buyPrice').value = value.toFixed(decimals);
+    } else {
+      const buy = calcSide(inp.buyPrice, shares, discount, minFee, taxRate, 0, false);
+      const totalCost = round2(buy.amount + buy.fee);
+      const be = calcBreakeven({ totalCost, shares, discount, minFee, taxRate, dir: 'long' });
+      if (be <= 0) return toast('無法對齊到損益兩平', true);
+      const { value, decimals } = snapPriceToTick(be, productType, 'long');
+      $('sellPrice').value = value.toFixed(decimals);
+    }
+    calculate();
+    toast('已對齊到損益兩平價');
+  }
+
+  function snapToTarget() {
+    const inp = readInputs();
+    const { shares, productType, discount, minFee, taxRate, borrowEffRate } = inp;
+    const targetPct = parseFloat($('targetReturn').value);
+    if (!isFinite(targetPct)) return toast('請輸入有效的目標報酬率', true);
+    if (shares <= 0) return toast('請先輸入交易數量', true);
+    const targetRate = targetPct / 100;
+
+    if (direction === 'short') {
+      const sell = calcSide(inp.sellPrice, shares, discount, minFee, taxRate, borrowEffRate, true);
+      const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+      const price = calcTargetPrice({
+        netSell, sellAmount: sell.amount, shares, discount, minFee, taxRate,
+        dir: 'short', targetRate,
+      });
+      if (price <= 0) return toast('目標報酬無法達成', true);
+      const { value, decimals } = snapPriceToTick(price, productType, 'short');
+      $('buyPrice').value = value.toFixed(decimals);
+    } else {
+      const buy = calcSide(inp.buyPrice, shares, discount, minFee, taxRate, 0, false);
+      const totalCost = round2(buy.amount + buy.fee);
+      const price = calcTargetPrice({
+        totalCost, shares, discount, minFee, taxRate,
+        dir: 'long', targetRate,
+      });
+      if (price <= 0) return toast('目標報酬無法達成', true);
+      const { value, decimals } = snapPriceToTick(price, productType, 'long');
+      $('sellPrice').value = value.toFixed(decimals);
+    }
+    calculate();
+    toast('已套用目標報酬 ' + targetPct + '%');
+  }
+
+  // ============================================================
+  // 重置 / 複製
+  // ============================================================
+  function resetAll() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    direction = DEFAULTS.direction;
+    unit = DEFAULTS.unit;
+    $('buyPrice').value     = DEFAULTS.buyPrice;
+    $('sellPrice').value    = DEFAULTS.sellPrice;
+    $('quantity').value     = DEFAULTS.quantity;
+    $('productType').value  = DEFAULTS.productType;
+    $('discount').value     = DEFAULTS.discount;
+    $('minFee').value       = DEFAULTS.minFee;
+    $('borrowRate').value   = DEFAULTS.borrowRate;
+    $('borrowDays').value   = DEFAULTS.borrowDays;
+    $('targetReturn').value = DEFAULTS.targetReturn;
+    syncToggleGroups();
+    updateDirectionUI();
+    calculate();
+    toast('已重置為預設值');
+  }
+
+  function buildReportText() {
+    const isShort = direction === 'short';
+    const lines = [
+      '台股交易計算結果',
+      '─────────────',
+      '方向: ' + (isShort ? '做空 (融券)' : '做多'),
+      $('buyPriceLabel').textContent + ': ' + $('buyPrice').value + ' 元',
+      $('sellPriceLabel').textContent + ': ' + $('sellPrice').value + ' 元',
+      '數量: ' + $('quantity').value + ' ' + (unit === 'lot' ? '張' : '股'),
+      '商品: ' + $('productType').selectedOptions[0].text,
+      '手續費折扣: ' + $('discount').value,
+    ];
+    if (isShort) {
+      lines.push('借券: 年化 ' + $('borrowRate').value + '% × ' + $('borrowDays').value + ' 天');
+    }
+    lines.push(
+      '─────────────',
+      '買進金額: ' + $('buyAmount').textContent,
+      '買進手續費: ' + $('buyFee').textContent,
+      '買進總成本: ' + $('totalCost').textContent,
+      '每股實際成本: ' + $('costPerShare').textContent,
+      '賣出金額: ' + $('sellAmount').textContent,
+      '賣出手續費: ' + $('sellFee').textContent,
+      '證交稅: ' + $('tax').textContent,
+    );
+    if (isShort) lines.push('借券費: ' + $('borrowFee').textContent);
+    lines.push(
+      '賣出淨收入: ' + $('netSell').textContent,
+      '每股實際淨收: ' + $('netPerShare').textContent,
+      '─────────────',
+      '損益: ' + $('profit').textContent,
+      '報酬率: ' + $('returnRate').textContent,
+      $('breakevenLabel').textContent + ': ' + $('breakeven').textContent,
+      '總交易成本: ' + $('totalFees').textContent,
+    );
+    return lines.join('\n');
+  }
+
+  async function copyResult() {
+    const text = buildReportText();
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('已複製到剪貼簿');
+      return;
+    } catch (_) { /* fallback to execCommand */ }
+    // Fallback: 為 file:// 協議或不支援 Clipboard API 的情況
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      toast('已複製到剪貼簿');
+    } catch (_) {
+      toast('複製失敗,請手動選取結果', true);
+    }
+    document.body.removeChild(ta);
+  }
+
+  function toast(msg, isErr) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.toggle('err', !!isErr);
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
+  // ============================================================
+  // localStorage 持久化(只記設定類,試算用的價格/數量不存)
+  // ============================================================
+  function saveSettings() {
+    try {
+      const data = {};
+      PERSIST_KEYS.forEach(k => {
+        if (k === 'direction') data[k] = direction;
+        else if (k === 'unit') data[k] = unit;
+        else data[k] = $(k).value;
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (_) {}
+  }
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.direction === 'long' || data.direction === 'short') direction = data.direction;
+      if (data.unit === 'lot' || data.unit === 'share') unit = data.unit;
+      ['productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'].forEach(k => {
+        if (data[k] !== undefined && data[k] !== null && data[k] !== '') $(k).value = data[k];
+      });
+    } catch (_) {}
+  }
+
+  // ============================================================
+  // 事件綁定
+  // ============================================================
+  ['buyPrice', 'sellPrice', 'quantity', 'discount', 'productType', 'minFee', 'borrowRate', 'borrowDays'].forEach(id => {
+    $(id).addEventListener('input', () => { calculate(); saveSettings(); });
+    $(id).addEventListener('change', () => { calculate(); saveSettings(); });
+  });
+  $('targetReturn').addEventListener('input', saveSettings);
+
+  $('directionGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    direction = e.target.dataset.dir;
+    syncToggleGroups();
+    updateDirectionUI();
+    calculate();
+    saveSettings();
+  });
+
+  $('unitGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    unit = e.target.dataset.unit;
+    syncToggleGroups();
+    calculate();
+    saveSettings();
+  });
+
+  $('qtyPresets').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    $('quantity').value = e.target.dataset.qty;
+    calculate();
+  });
+
+  $('discountGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    $('discount').value = e.target.dataset.discount;
+    syncToggleGroups();
+    calculate();
+    saveSettings();
+  });
+  $('discount').addEventListener('input', syncToggleGroups);
+
+  $('snapBreakeven').addEventListener('click', snapToBreakeven);
+  $('snapTarget').addEventListener('click', snapToTarget);
+  $('resetBtn').addEventListener('click', resetAll);
+  $('copyBtn').addEventListener('click', copyResult);
+
+  $('themeGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    applyTheme(e.target.dataset.theme);
+  });
+
+  // ============================================================
+  // 滾輪調整 number input(只綁在 number input 上,避免影響全域捲動)
+  // ------------------------------------------------------------
+  // 為什麼需要:Chromium 73+ 預設下,number input 即使聚焦,
+  // 滾輪事件仍會被頁面捲動搶走。這裡只在 input 取得焦點時接管 wheel。
+  //
+  // 行為:
+  //   - 步進量 = input 的 step (買賣價用動態 tick)
+  //   - 遵守 min/max,小數位數依 step 決定
+  //   - 改值後派發 input + change 事件,觸發 calculate
+  //   - passive: false 才能 preventDefault
+  // ============================================================
+  function attachWheelToNumberInputs() {
+    document.querySelectorAll('input[type=number]').forEach(el => {
+      el.addEventListener('wheel', (e) => {
+        if (document.activeElement !== el || el.disabled || el.readOnly) return;
+        e.preventDefault();
+        const step = parseFloat(el.step) || 1;
+        const min  = el.min !== '' ? parseFloat(el.min) : null;
+        const max  = el.max !== '' ? parseFloat(el.max) : null;
+        const cur  = parseFloat(el.value) || 0;
+        let next = cur + (e.deltaY < 0 ? step : -step);
+        if (min !== null && next < min) next = min;
+        if (max !== null && next > max) next = max;
+        const decimals = ((el.step || '1').split('.')[1] || '').length;
+        el.value = next.toFixed(decimals);
+        el.dispatchEvent(new Event('input',  { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, { passive: false });
+    });
+  }
+
+  // 為 tests.html 暴露純函數 (iframe 透過 window.__calc 存取)
+  window.__calc = {
+    fmtNum, fmtMoney, round2, getTickSize,
+    calcFee, calcSide, calcBreakeven, calcTargetPrice, snapPriceToTick,
+    TAX_RATES, FEE_RATE,
+  };
+
+  // ============================================================
+  // 啟動
+  // ============================================================
+  loadSettings();
+  applyTheme(themeMode);  // 同步 meta theme-color + 按鈕狀態 (CSS 已由 head 內 script 套用)
+  syncToggleGroups();
+  updateDirectionUI();
+  attachWheelToNumberInputs();
+  calculate();
+</script>
+</body>
+</html>

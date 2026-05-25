@@ -1,0 +1,29 @@
+# IDE / 編輯器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 暫存與備份
+*.log
+*.bak
+*.orig
+*.tmp
+~$*
+
+# Python (萬一日後加 server-side 工具)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (萬一日後加 build step)
+node_modules/
+npm-debug.log*
+.env
+.env.local
