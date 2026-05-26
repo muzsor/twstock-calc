@@ -829,8 +829,9 @@
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const THEME_KEY = 'twStockCalc.theme';  // 主題獨立 key (供 head 內早於 style 的 script 讀取)
   const TAB_KEY = 'twStockCalc.activeTab';
-  // 只記憶「設定類」欄位,試算情境(價格、數量)每次都是新試算,不存
-  const PERSIST_KEYS = ['direction', 'unit', 'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
+  // 全部輸入欄位都持久化(含買賣價、數量),重新整理可直接接續上次的試算
+  const PERSIST_KEYS = ['direction', 'unit', 'buyPrice', 'sellPrice', 'quantity',
+                        'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
   const DEFAULTS = {
     direction: 'long', unit: 'lot',
     buyPrice: 100, sellPrice: 110, quantity: 1,
@@ -1288,6 +1289,7 @@
       $('sellPrice').value = value.toFixed(decimals);
     }
     calculate();
+    saveSettings();
     toast('已對齊到損益兩平價');
   }
 
@@ -1321,6 +1323,7 @@
       $('sellPrice').value = value.toFixed(decimals);
     }
     calculate();
+    saveSettings();
     toast('已套用目標報酬 ' + targetPct + '%');
   }
 
@@ -1417,7 +1420,7 @@
   }
 
   // ============================================================
-  // localStorage 持久化(只記設定類,試算用的價格/數量不存)
+  // localStorage 持久化(全部輸入欄位都記住)
   // ============================================================
   function saveSettings() {
     try {
@@ -1439,7 +1442,7 @@
       if (data.direction === 'long' || data.direction === 'short') direction = data.direction;
       if (data.unit === 'lot' || data.unit === 'share') unit = data.unit;
       if (data.productType && TAX_RATES[data.productType] !== undefined) productType = data.productType;
-      ['discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'].forEach(k => {
+      ['buyPrice', 'sellPrice', 'quantity', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'].forEach(k => {
         if (data[k] !== undefined && data[k] !== null && data[k] !== '') $(k).value = data[k];
       });
     } catch (_) {}
@@ -1475,6 +1478,7 @@
     if (e.target.tagName !== 'BUTTON') return;
     $('quantity').value = e.target.dataset.qty;
     calculate();
+    saveSettings();
   });
 
   $('productTypeGroup').addEventListener('click', e => {
