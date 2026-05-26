@@ -59,7 +59,7 @@
 </head>
 <body>
 <h1>Calculator 單元測試</h1>
-<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize)</div>
+<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit)</div>
 <div id="summary" class="summary loading">載入中…</div>
 <table>
   <thead>
@@ -75,7 +75,7 @@
 
 <div class="note">
   ※ 此頁透過 iframe 載入 index.html,讀取 <code>window.__calc</code> 暴露的純函數來測試。<br>
-  ※ 涵蓋所有計算邏輯;UI 互動(reset/copy/snap 按鈕、localStorage、滾輪、direction 切換)需手動驗證。<br>
+  ※ 涵蓋所有計算邏輯;UI 互動(reset/copy/snap 按鈕、localStorage、滾輪、direction / Tab / 商品類型 切換)需手動驗證。<br>
   ※ 浮點運算的測試用近似比對 (tol = 1e-3 或 1e-9 依情境)。
 </div>
 
@@ -129,8 +129,9 @@
   }
 
   function runTests(C) {
-    const { fmtNum, fmtMoney, round2, getTickSize, calcFee, calcSide,
-            calcBreakeven, calcTargetPrice, snapPriceToTick, FEE_RATE, TAX_RATES } = C;
+    const { fmtNum, fmtMoney, round2, getTickSize, formatDiscount, calcFee, calcSide,
+            calcBreakeven, calcTargetPrice, snapPriceToTick, calcScenarioProfit,
+            FEE_RATE, TAX_RATES } = C;
 
     // ============================================================
     group('fmtMoney — 金額格式化');
@@ -151,6 +152,18 @@
     // ============================================================
     assert('NaN → "-"', fmtNum(NaN), '-');
     assert('1234.5 with 2dp', fmtNum(1234.5, 2), '1,234.50');
+
+    // ============================================================
+    group('formatDiscount — 折數標籤');
+    // ============================================================
+    assert('1 → 原價', formatDiscount(1), '原價');
+    assert('1.5 (clamp) → 原價', formatDiscount(1.5), '原價');
+    assert('0.6 → 6折', formatDiscount(0.6), '6折');
+    assert('0.5 → 5折', formatDiscount(0.5), '5折');
+    assert('0.38 → 3.8折', formatDiscount(0.38), '3.8折');
+    assert('0.28 → 2.8折', formatDiscount(0.28), '2.8折');
+    assert('0.55 → 5.5折', formatDiscount(0.55), '5.5折');
+    assert('0.123 → 1.23折', formatDiscount(0.123), '1.23折');
 
     // ============================================================
     group('round2 — 四捨五入到 2 位小數');
@@ -330,6 +343,83 @@
     {
       const s = snapPriceToTick(9.99, 'stock', 'short');
       assert('short 9.99 → 9.99 (floor tick 0.01)', s.value, 9.99, { approx: true, tol: 1e-9 });
+    }
+
+    // ============================================================
+    group('calcScenarioProfit — 區間試算 (沿用買賣雙方手續費 + 稅)');
+    // ============================================================
+    {
+      // 做多獲利:1 張 stock,100→110
+      const r = calcScenarioProfit({ buyPrice: 100, sellPrice: 110, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'long' });
+      assert('long totalCost = 100,142', r.totalCost, 100142);
+      assert('long netSell = 109,514', r.netSell, 109514);
+      assert('long profit = 9,372', r.profit, 9372);
+      assert('long return ≈ 9.36%', r.returnRate, 9.3587, { approx: true, tol: 0.01 });
+    }
+    {
+      // 做多賠錢:100→90
+      const r = calcScenarioProfit({ buyPrice: 100, sellPrice: 90, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'long' });
+      assert('long loss profit = -10,540 (90k - 128 - 270 - 100142)', r.profit, -10540);
+    }
+    {
+      // 做空獲利:100→90, 借券 1 天
+      const r = calcScenarioProfit({ buyPrice: 90, sellPrice: 100, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0.0008 / 365, dir: 'short' });
+      assert('short netSell = 99,558', r.netSell, 99558);
+      assert('short totalCost (回補) = 90,128', r.totalCost, 90128);
+      assert('short profit = 9,430', r.profit, 9430);
+      assert('short return uses sellAmount → ≈ 9.43%', r.returnRate, 9.43, { approx: true, tol: 0.01 });
+    }
+    {
+      // 做空賠錢:100→110(回補價變高)
+      const r = calcScenarioProfit({ buyPrice: 110, sellPrice: 100, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'short' });
+      assert('short loss profit (大賠)', r.profit < 0, true);
+    }
+    {
+      // ETF 稅率
+      const r = calcScenarioProfit({ buyPrice: 50, sellPrice: 55, shares: 1000, discount: 1, minFee: 20, taxRate: 0.001, borrowEffRate: 0, dir: 'long' });
+      // buyAmt=50000, buyFee=floor(50000*0.001425)=71, totalCost=50071
+      // sellAmt=55000, sellFee=floor(55000*0.001425)=78, tax=floor(55000*0.001)=55, netSell=54867
+      // profit=54867-50071=4796
+      assert('ETF profit = 4,796', r.profit, 4796);
+    }
+    {
+      // 當沖
+      const r = calcScenarioProfit({ buyPrice: 100, sellPrice: 102, shares: 1000, discount: 1, minFee: 20, taxRate: 0.0015, borrowEffRate: 0, dir: 'long' });
+      // buyAmt=100000, buyFee=142, totalCost=100142
+      // sellAmt=102000, sellFee=floor(102000*0.001425)=145, tax=floor(102000*0.0015)=153, netSell=101702
+      // profit=101702-100142=1560
+      assert('當沖 profit = 1,560', r.profit, 1560);
+    }
+    {
+      // 折扣
+      const r = calcScenarioProfit({ buyPrice: 100, sellPrice: 110, shares: 1000, discount: 0.28, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'long' });
+      // buyFee=floor(100000*0.001425*0.28)=39, totalCost=100039
+      // sellFee=floor(110000*0.001425*0.28)=43, tax=330, netSell=109627
+      // profit=109627-100039=9588
+      assert('2.8折 profit = 9,588', r.profit, 9588);
+    }
+    {
+      // shares = 0
+      const r = calcScenarioProfit({ buyPrice: 100, sellPrice: 110, shares: 0, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'long' });
+      assert('shares=0 → profit=0', r.profit, 0);
+      assert('shares=0 → returnRate=0', r.returnRate, 0);
+    }
+    {
+      // buyPrice = 0
+      const r = calcScenarioProfit({ buyPrice: 0, sellPrice: 110, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'long' });
+      assert('buyPrice=0 → profit=0', r.profit, 0);
+    }
+    {
+      // 驗證與 calcBreakeven 一致:在 long breakeven 賣價,profit 接近 0
+      const be = calcBreakeven({ totalCost: 100142, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'long' });
+      const r = calcScenarioProfit({ buyPrice: 100, sellPrice: round2(be), shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0, dir: 'long' });
+      assert('long be 賣價 → |profit| ≤ 10', Math.abs(r.profit) <= 10, true);
+    }
+    {
+      // 驗證與 calcBreakeven 一致:在 short breakeven 回補價,profit 接近 0
+      const be = calcBreakeven({ netSell: 99558, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short' });
+      const r = calcScenarioProfit({ buyPrice: round2(be), sellPrice: 100, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0.0008/365, dir: 'short' });
+      assert('short be 回補價 → |profit| ≤ 10', Math.abs(r.profit) <= 10, true);
     }
 
     // ============================================================

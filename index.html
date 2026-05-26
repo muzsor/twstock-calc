@@ -227,6 +227,102 @@
     gap: 18px;
     align-items: start;
   }
+  /* 結果卡內的分頁 — 取代 h2 當作 card title,主動底線色與內容銜接 */
+  .card-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .card-tabs button {
+    padding: 6px 16px 11px;
+    margin-bottom: -2px;     /* 與 .card-tabs 的 border 重疊,讓 active 下緣銜接內容 */
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 17px;
+    font-family: inherit;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .card-tabs button:hover:not(.active) {
+    color: var(--text-strong);
+  }
+  .card-tabs button.active {
+    color: var(--text-strong);
+    font-weight: 700;
+    border-bottom-color: var(--bg-primary);
+  }
+  .tab-content[hidden] { display: none; }
+
+  /* 區間試算表格 */
+  .range-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .range-table th, .range-table td {
+    padding: 11px 14px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 15px;
+  }
+  .range-table th {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .range-table th:first-child,
+  .range-table td:first-child {
+    text-align: left;
+  }
+  .range-table tbody tr.center {
+    background: var(--bg-highlight);
+  }
+  .range-table tbody tr.center td:first-child {
+    color: #d4a14a;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .range-table td.profit-cell { font-weight: 600; }
+  .range-table td.profit-cell.gain { color: var(--profit-text); }
+  .range-table td.profit-cell.lose { color: var(--loss-text); }
+  .range-table tbody tr td.empty {
+    text-align: center;
+    color: var(--text-faint);
+    padding: 28px 14px;
+    font-size: 14px;
+  }
+
+  /* 區間試算摘要區塊 */
+  .range-summary {
+    background: var(--bg-input);
+    border: 1px solid var(--border-soft);
+    border-radius: 3px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+  }
+  .range-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 14px;
+  }
+  .range-summary-row .label { color: var(--text-muted); }
+  .range-summary-row .value {
+    color: var(--text-strong);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .range-summary-row.big .value { font-size: 18px; }
+  .range-summary-row .value.gain-text { color: var(--profit-text); }
+  .range-summary-row .value.lose-text { color: var(--loss-text); }
 
   .card {
     background: var(--bg-card);
@@ -565,13 +661,13 @@
         </div>
 
         <div class="field">
-          <label for="productType">商品類型 (證交稅率)</label>
-          <select id="productType">
-            <option value="stock">一般股票 — 0.3%</option>
-            <option value="etf">ETF — 0.1%</option>
-            <option value="daytrade">現股當沖 — 0.15%</option>
-            <option value="none">無證交稅</option>
-          </select>
+          <label>商品類型 (證交稅率)</label>
+          <div class="btn-group" id="productTypeGroup" role="group" aria-label="商品類型">
+            <button type="button" data-product="stock" class="active" aria-pressed="true">一般 (0.3%)</button>
+            <button type="button" data-product="etf" aria-pressed="false">ETF (0.1%)</button>
+            <button type="button" data-product="daytrade" aria-pressed="false">當沖 (0.15%)</button>
+            <button type="button" data-product="none" aria-pressed="false">免稅</button>
+          </div>
         </div>
 
         <div class="field">
@@ -605,77 +701,117 @@
             <div class="help">借券費 = 成交金額 × 年化率 × 天數 / 365</div>
           </div>
         </div>
-      </div>
+      </div><!-- /card 交易條件 -->
 
       <div class="card" aria-live="polite" aria-atomic="false">
-        <h2>計算結果</h2>
-
-        <div class="result-section">
-          <div class="result-row">
-            <span class="label">買進金額</span>
-            <span class="value" id="buyAmount">-</span>
-          </div>
-          <div class="result-row">
-            <span class="label">買進手續費</span>
-            <span class="value" id="buyFee">-</span>
-          </div>
-          <div class="result-row highlight">
-            <span class="label">買進總成本</span>
-            <span class="value" id="totalCost">-</span>
-          </div>
-          <div class="result-row sub">
-            <span class="label">└ 每股實際成本</span>
-            <span class="value" id="costPerShare">-</span>
-          </div>
+        <div class="card-tabs" id="tabNav" role="tablist" aria-label="結果顯示模式">
+          <button type="button" data-tab="detail" class="active" role="tab" aria-selected="true">詳細試算</button>
+          <button type="button" data-tab="range" role="tab" aria-selected="false">區間試算</button>
         </div>
 
-        <div class="result-section">
-          <div class="result-row">
-            <span class="label">賣出金額</span>
-            <span class="value" id="sellAmount">-</span>
+        <div class="tab-content" data-tab="detail" role="tabpanel">
+          <div class="result-section">
+            <div class="result-row">
+              <span class="label">買進金額</span>
+              <span class="value" id="buyAmount">-</span>
+            </div>
+            <div class="result-row">
+              <span class="label">買進手續費</span>
+              <span class="value" id="buyFee">-</span>
+            </div>
+            <div class="result-row highlight">
+              <span class="label">買進總成本</span>
+              <span class="value" id="totalCost">-</span>
+            </div>
+            <div class="result-row sub">
+              <span class="label">└ 每股實際成本</span>
+              <span class="value" id="costPerShare">-</span>
+            </div>
           </div>
-          <div class="result-row">
-            <span class="label">賣出手續費</span>
-            <span class="value" id="sellFee">-</span>
-          </div>
-          <div class="result-row">
-            <span class="label">證交稅</span>
-            <span class="value" id="tax">-</span>
-          </div>
-          <div class="result-row" id="borrowFeeRow" style="display:none">
-            <span class="label">借券費</span>
-            <span class="value" id="borrowFee">-</span>
-          </div>
-          <div class="result-row highlight">
-            <span class="label">賣出淨收入</span>
-            <span class="value" id="netSell">-</span>
-          </div>
-          <div class="result-row sub">
-            <span class="label">└ 每股實際淨收</span>
-            <span class="value" id="netPerShare">-</span>
-          </div>
-        </div>
 
-        <div class="result-section">
-          <div class="result-row big" id="profitRow">
-            <span class="label">損益</span>
-            <span class="value" id="profit">-</span>
+          <div class="result-section">
+            <div class="result-row">
+              <span class="label">賣出金額</span>
+              <span class="value" id="sellAmount">-</span>
+            </div>
+            <div class="result-row">
+              <span class="label">賣出手續費</span>
+              <span class="value" id="sellFee">-</span>
+            </div>
+            <div class="result-row">
+              <span class="label">證交稅</span>
+              <span class="value" id="tax">-</span>
+            </div>
+            <div class="result-row" id="borrowFeeRow" style="display:none">
+              <span class="label">借券費</span>
+              <span class="value" id="borrowFee">-</span>
+            </div>
+            <div class="result-row highlight">
+              <span class="label">賣出淨收入</span>
+              <span class="value" id="netSell">-</span>
+            </div>
+            <div class="result-row sub">
+              <span class="label">└ 每股實際淨收</span>
+              <span class="value" id="netPerShare">-</span>
+            </div>
           </div>
-          <div class="result-row" id="returnRow">
-            <span class="label">報酬率</span>
-            <span class="value" id="returnRate">-</span>
+
+          <div class="result-section">
+            <div class="result-row big" id="profitRow">
+              <span class="label">損益</span>
+              <span class="value" id="profit">-</span>
+            </div>
+            <div class="result-row" id="returnRow">
+              <span class="label">報酬率</span>
+              <span class="value" id="returnRate">-</span>
+            </div>
+            <div class="result-row">
+              <span class="label" id="breakevenLabel">損益兩平賣價</span>
+              <span class="value" id="breakeven">-</span>
+            </div>
+            <div class="result-row">
+              <span class="label">總交易成本 (手續費+稅)</span>
+              <span class="value" id="totalFees">-</span>
+            </div>
           </div>
-          <div class="result-row">
-            <span class="label" id="breakevenLabel">損益兩平賣價</span>
-            <span class="value" id="breakeven">-</span>
+        </div><!-- /tab-content detail -->
+
+        <div class="tab-content" data-tab="range" role="tabpanel" hidden>
+          <div class="range-summary">
+            <div class="range-summary-row">
+              <span class="label" id="rangeFixedLabel">買進總成本</span>
+              <span class="value" id="rangeFixedValue">-</span>
+            </div>
+            <div class="range-summary-row">
+              <span class="label" id="rangeBreakevenLabel">損益兩平賣價</span>
+              <span class="value" id="rangeBreakeven">-</span>
+            </div>
+            <div class="range-summary-row big">
+              <span class="label" id="rangeCenterProfitLabel">中心賣價損益</span>
+              <span class="value" id="rangeCenterProfit">-</span>
+            </div>
           </div>
-          <div class="result-row">
-            <span class="label">總交易成本 (手續費+稅)</span>
-            <span class="value" id="totalFees">-</span>
+
+          <table class="range-table">
+            <thead>
+              <tr>
+                <th id="rangePriceLabel">賣出價</th>
+                <th>損益試算</th>
+                <th>報酬率</th>
+              </tr>
+            </thead>
+            <tbody id="rangeTableBody">
+              <tr><td colspan="3" class="empty">請於左側輸入價格與數量</td></tr>
+            </tbody>
+          </table>
+
+          <div class="help" style="margin-top: 12px; line-height: 1.7;">
+            ※ 表格以左側<strong>賣出價(做多)</strong>或<strong>回補價(做空)</strong>為中心,上下各 5 個升降單位共 11 列<br>
+            ※ 另一邊的價格與手續費、稅率、借券費皆沿用左側設定
           </div>
-        </div>
-      </div>
-    </div>
+        </div><!-- /tab-content range -->
+      </div><!-- /card right -->
+    </div><!-- /layout -->
 
     <div class="footer-note">
       ※ 本工具僅供試算參考,<strong>不構成任何投資建議</strong><br>
@@ -692,6 +828,7 @@
   const $ = id => document.getElementById(id);
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const THEME_KEY = 'twStockCalc.theme';  // 主題獨立 key (供 head 內早於 style 的 script 讀取)
+  const TAB_KEY = 'twStockCalc.activeTab';
   // 只記憶「設定類」欄位,試算情境(價格、數量)每次都是新試算,不存
   const PERSIST_KEYS = ['direction', 'unit', 'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
   const DEFAULTS = {
@@ -703,9 +840,12 @@
   const TAX_RATES = { stock: 0.003, etf: 0.001, daytrade: 0.0015, none: 0 };
   const FEE_RATE = 0.001425;
   const THEME_COLORS = { light: '#f5f5f5', dark: '#000000' };  // 對應 meta theme-color
+  const RANGE_ROWS_HALF = 5;  // 中心價上下各 N 列 → 總共 2N+1 列 (11)
 
   let unit = DEFAULTS.unit;
   let direction = DEFAULTS.direction;
+  let productType = DEFAULTS.productType;
+  let activeTab = 'detail';
   // 從 <head> 早於 style 的 init script 已設好 data-theme-mode,讀回來避免雙重邏輯
   let themeMode = document.documentElement.getAttribute('data-theme-mode') || 'auto';
 
@@ -728,6 +868,14 @@
     return sign + 'NT$ ' + fmtNum(abs, dp);
   }
   const round2 = n => Math.round(n * 100) / 100;
+
+  // 折數顯示:1.0 → "原價",0.6 → "6折",0.38 → "3.8折",0.55 → "5.5折"
+  function formatDiscount(d) {
+    if (!isFinite(d) || d >= 1) return '原價';
+    if (d <= 0) return String(d);
+    const pct = d * 10;
+    return parseFloat(pct.toFixed(2)).toString() + '折';
+  }
 
   // ============================================================
   // 升降單位 (tick)
@@ -760,8 +908,8 @@
       shares: (unit === 'lot' ? 1000 : 1) * qty,
       discount,
       minFee: Math.max(0, parseFloat($('minFee').value) || 0),
-      productType: $('productType').value,
-      taxRate: TAX_RATES[$('productType').value] ?? 0.003,
+      productType,
+      taxRate: TAX_RATES[productType] ?? 0.003,
       // 實際借券費率 = 年化費率 × 天數 / 365,做多時為 0
       borrowEffRate: direction === 'short' ? annualBorrowRate * days / 365 : 0,
     };
@@ -843,6 +991,27 @@
   }
 
   // ============================================================
+  // 區間試算:給定一組 buyPrice/sellPrice,計算單一情境的損益
+  //   做多: 改變 sellPrice,固定 buyPrice → 計算各 sellPrice 下的損益
+  //   做空: 改變 buyPrice(回補價),固定 sellPrice → 計算各回補價下的損益
+  //   為與「詳細試算」一致,基準 (報酬率分母) 同 calculate():
+  //     long → totalCost(買進總成本);short → sellAmount(放空名目)
+  // ============================================================
+  function calcScenarioProfit({ buyPrice, sellPrice, shares, discount, minFee, taxRate, borrowEffRate, dir }) {
+    if (shares <= 0 || buyPrice <= 0 || sellPrice <= 0) {
+      return { profit: 0, returnRate: 0, totalCost: 0, netSell: 0 };
+    }
+    const buy = calcSide(buyPrice, shares, discount, minFee, taxRate, 0, false);
+    const sell = calcSide(sellPrice, shares, discount, minFee, taxRate, borrowEffRate, true);
+    const totalCost = round2(buy.amount + buy.fee);
+    const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+    const profit = round2(netSell - totalCost);
+    const basis = dir === 'short' ? sell.amount : totalCost;
+    const returnRate = basis > 0 ? (profit / basis) * 100 : 0;
+    return { profit, returnRate, totalCost, netSell };
+  }
+
+  // ============================================================
   // UI 同步
   // ============================================================
   function renderQtyPresets() {
@@ -856,7 +1025,6 @@
   }
 
   function updateTickSizes() {
-    const productType = $('productType').value;
     const bp = parseFloat($('buyPrice').value) || 0;
     const sp = parseFloat($('sellPrice').value) || 0;
     const buyTick = getTickSize(bp, productType);
@@ -902,6 +1070,11 @@
     });
     [...$('themeGroup').children].forEach(b => {
       const active = b.dataset.theme === themeMode;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active);
+    });
+    [...$('productTypeGroup').children].forEach(b => {
+      const active = b.dataset.product === productType;
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active);
     });
@@ -975,6 +1148,120 @@
     const cls = profit >= 0 ? 'profit' : 'loss';
     $('profitRow').className = 'result-row big ' + cls;
     $('returnRow').className = 'result-row ' + cls;
+
+    // 共用設定 (discount, minFee) 變動時,也同步更新區間試算
+    renderRangeTable();
+  }
+
+  // ============================================================
+  // 區間試算 — 渲染表格
+  //   做多: 中心 = sellPrice,變動賣價、固定買價
+  //   做空: 中心 = buyPrice(回補價),變動回補價、固定放空價
+  //   公式與計算結果一致 → 使用同一 readInputs/calcSide/calcBreakeven 路徑
+  // ============================================================
+  function renderRangeTable() {
+    const inp = readInputs();
+    const { buyPrice, sellPrice, shares, discount, minFee, taxRate, borrowEffRate } = inp;
+    const isShort = direction === 'short';
+
+    // 中心價 = 變動側
+    const center = isShort ? buyPrice : sellPrice;
+    const fixedPrice = isShort ? sellPrice : buyPrice;
+
+    const body = $('rangeTableBody');
+    const elFixedLabel = $('rangeFixedLabel');
+    const elFixedValue = $('rangeFixedValue');
+    const elBeLabel = $('rangeBreakevenLabel');
+    const elBe = $('rangeBreakeven');
+    const elCpLabel = $('rangeCenterProfitLabel');
+    const elCp = $('rangeCenterProfit');
+    const elPriceLabel = $('rangePriceLabel');
+
+    // 動態標籤
+    elPriceLabel.textContent = isShort ? '回補價' : '賣出價';
+    elBeLabel.textContent = isShort ? '損益兩平回補價' : '損益兩平賣價';
+    elCpLabel.textContent = isShort ? '中心回補價損益' : '中心賣價損益';
+    elFixedLabel.textContent = isShort ? '放空淨收入' : '買進總成本';
+
+    if (shares <= 0 || center <= 0 || fixedPrice <= 0) {
+      body.innerHTML = '<tr><td colspan="3" class="empty">請於左側輸入有效的價格與數量</td></tr>';
+      elFixedValue.textContent = '-';
+      elBe.textContent = '-';
+      elCp.textContent = '-';
+      elCp.className = 'value';
+      return;
+    }
+
+    // 摘要:固定側金額 + 損益兩平
+    let fixedAmt, be;
+    if (isShort) {
+      const sell = calcSide(sellPrice, shares, discount, minFee, taxRate, borrowEffRate, true);
+      const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
+      fixedAmt = netSell;
+      be = calcBreakeven({ netSell, shares, discount, minFee, taxRate, dir: 'short' });
+    } else {
+      const buy = calcSide(buyPrice, shares, discount, minFee, taxRate, 0, false);
+      const totalCost = round2(buy.amount + buy.fee);
+      fixedAmt = totalCost;
+      be = calcBreakeven({ totalCost, shares, discount, minFee, taxRate, dir: 'long' });
+    }
+
+    const tick = getTickSize(center, productType);
+    const decimals = tick < 1 ? 2 : 0;
+
+    // ±N 列圍繞中心 — 由高到低
+    const rows = [];
+    for (let i = RANGE_ROWS_HALF; i >= -RANGE_ROWS_HALF; i--) {
+      const price = Math.max(0, round2(center + i * tick));
+      const buyP = isShort ? price : buyPrice;
+      const sellP = isShort ? sellPrice : price;
+      const r = calcScenarioProfit({
+        buyPrice: buyP, sellPrice: sellP, shares,
+        discount, minFee, taxRate, borrowEffRate, dir: direction,
+      });
+      rows.push({ price, profit: r.profit, returnRate: r.returnRate, isCenter: i === 0 });
+    }
+
+    // 摘要區
+    elFixedValue.textContent = fmtMoney(fixedAmt);
+    elBe.textContent = be > 0 ? 'NT$ ' + be.toFixed(2) : '-';
+    const centerRow = rows.find(r => r.isCenter);
+    if (centerRow) {
+      const cp = centerRow.profit;
+      const sign = cp > 0 ? '+' : '';
+      elCp.textContent = sign + fmtMoney(cp);
+      elCp.className = 'value ' + (cp > 0 ? 'gain-text' : (cp < 0 ? 'lose-text' : ''));
+    }
+
+    body.innerHTML = rows.map(r => {
+      const cls = r.profit > 0 ? 'profit-cell gain' : (r.profit < 0 ? 'profit-cell lose' : 'profit-cell');
+      const profitSign = r.profit > 0 ? '+' : '';
+      const rrSign = r.returnRate > 0 ? '+' : '';
+      const profitDp = Math.abs(r.profit - Math.round(r.profit)) > 1e-6 ? 2 : 0;
+      return '<tr class="' + (r.isCenter ? 'center' : '') + '">' +
+        '<td>' + r.price.toFixed(decimals) + '</td>' +
+        '<td class="' + cls + '">' + profitSign + fmtNum(r.profit, profitDp) + '</td>' +
+        '<td class="' + cls + '">' + rrSign + (isFinite(r.returnRate) ? r.returnRate.toFixed(2) : '0.00') + '%</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  // ============================================================
+  // Tab 切換
+  // ============================================================
+  function switchTab(name) {
+    if (name !== 'detail' && name !== 'range') name = 'detail';
+    activeTab = name;
+    document.querySelectorAll('#tabNav button').forEach(b => {
+      const active = b.dataset.tab === name;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', active);
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+      c.hidden = c.dataset.tab !== name;
+    });
+    try { localStorage.setItem(TAB_KEY, name); } catch (_) {}
+    if (name === 'range') renderRangeTable();
   }
 
   // ============================================================
@@ -1044,10 +1331,10 @@
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
     direction = DEFAULTS.direction;
     unit = DEFAULTS.unit;
+    productType = DEFAULTS.productType;
     $('buyPrice').value     = DEFAULTS.buyPrice;
     $('sellPrice').value    = DEFAULTS.sellPrice;
     $('quantity').value     = DEFAULTS.quantity;
-    $('productType').value  = DEFAULTS.productType;
     $('discount').value     = DEFAULTS.discount;
     $('minFee').value       = DEFAULTS.minFee;
     $('borrowRate').value   = DEFAULTS.borrowRate;
@@ -1068,8 +1355,8 @@
       $('buyPriceLabel').textContent + ': ' + $('buyPrice').value + ' 元',
       $('sellPriceLabel').textContent + ': ' + $('sellPrice').value + ' 元',
       '數量: ' + $('quantity').value + ' ' + (unit === 'lot' ? '張' : '股'),
-      '商品: ' + $('productType').selectedOptions[0].text,
-      '手續費折扣: ' + $('discount').value,
+      '證交稅率: ' + ($('productTypeGroup').querySelector('button.active')?.textContent || productType),
+      '手續費折扣: ' + formatDiscount(parseFloat($('discount').value)) + ' (' + $('discount').value + ')',
     ];
     if (isShort) {
       lines.push('借券: 年化 ' + $('borrowRate').value + '% × ' + $('borrowDays').value + ' 天');
@@ -1138,6 +1425,7 @@
       PERSIST_KEYS.forEach(k => {
         if (k === 'direction') data[k] = direction;
         else if (k === 'unit') data[k] = unit;
+        else if (k === 'productType') data[k] = productType;
         else data[k] = $(k).value;
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -1150,7 +1438,8 @@
       const data = JSON.parse(raw);
       if (data.direction === 'long' || data.direction === 'short') direction = data.direction;
       if (data.unit === 'lot' || data.unit === 'share') unit = data.unit;
-      ['productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'].forEach(k => {
+      if (data.productType && TAX_RATES[data.productType] !== undefined) productType = data.productType;
+      ['discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'].forEach(k => {
         if (data[k] !== undefined && data[k] !== null && data[k] !== '') $(k).value = data[k];
       });
     } catch (_) {}
@@ -1159,7 +1448,7 @@
   // ============================================================
   // 事件綁定
   // ============================================================
-  ['buyPrice', 'sellPrice', 'quantity', 'discount', 'productType', 'minFee', 'borrowRate', 'borrowDays'].forEach(id => {
+  ['buyPrice', 'sellPrice', 'quantity', 'discount', 'minFee', 'borrowRate', 'borrowDays'].forEach(id => {
     $(id).addEventListener('input', () => { calculate(); saveSettings(); });
     $(id).addEventListener('change', () => { calculate(); saveSettings(); });
   });
@@ -1188,6 +1477,14 @@
     calculate();
   });
 
+  $('productTypeGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    productType = e.target.dataset.product;
+    syncToggleGroups();
+    calculate();
+    saveSettings();
+  });
+
   $('discountGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
     $('discount').value = e.target.dataset.discount;
@@ -1205,6 +1502,12 @@
   $('themeGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
     applyTheme(e.target.dataset.theme);
+  });
+
+  // Tab 切換
+  $('tabNav').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    switchTab(e.target.dataset.tab);
   });
 
   // ============================================================
@@ -1241,8 +1544,9 @@
 
   // 為 tests.html 暴露純函數 (iframe 透過 window.__calc 存取)
   window.__calc = {
-    fmtNum, fmtMoney, round2, getTickSize,
+    fmtNum, fmtMoney, round2, getTickSize, formatDiscount,
     calcFee, calcSide, calcBreakeven, calcTargetPrice, snapPriceToTick,
+    calcScenarioProfit,
     TAX_RATES, FEE_RATE,
   };
 
@@ -1251,10 +1555,16 @@
   // ============================================================
   loadSettings();
   applyTheme(themeMode);  // 同步 meta theme-color + 按鈕狀態 (CSS 已由 head 內 script 套用)
+  // 還原上次的分頁
+  try {
+    const savedTab = localStorage.getItem(TAB_KEY);
+    if (savedTab === 'detail' || savedTab === 'range') activeTab = savedTab;
+  } catch (_) {}
   syncToggleGroups();
   updateDirectionUI();
   attachWheelToNumberInputs();
   calculate();
+  switchTab(activeTab);
 </script>
 </body>
 </html>
