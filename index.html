@@ -43,6 +43,7 @@
     --bg-card: #ffffff;
     --bg-input: #fafafa;
     --bg-highlight: #f0f0f0;
+    --bg-center-row: #fff3c4;  /* 區間試算中心列 — 暖金色系,呼應金色價格文字 */
     --bg-big: #f5f5f5;
     --bg-btn: #ffffff;
     --bg-btn-hover: #f5f5f5;
@@ -82,6 +83,7 @@
     --bg-card: #2e2e2e;
     --bg-input: #1a1a1a;
     --bg-highlight: #404040;
+    --bg-center-row: #3d3220;  /* 區間試算中心列 — 暖金色系,呼應金色價格文字 */
     --bg-big: #000000;
     --bg-btn: #1f1f1f;
     --bg-btn-hover: #2a2a2a;
@@ -282,12 +284,15 @@
     text-align: left;
   }
   .range-table tbody tr.center {
-    background: var(--bg-highlight);
+    background: var(--bg-center-row);
   }
   .range-table tbody tr.center td:first-child {
-    color: #d4a14a;
+    color: #b8862e;  /* 比金色文字更飽和一點,確保淺色金色背景下仍清楚 */
     font-weight: 700;
     font-size: 16px;
+  }
+  :root[data-theme="dark"] .range-table tbody tr.center td:first-child {
+    color: #f5c451;  /* 深色金色背景下,亮金色文字較清楚 */
   }
   .range-table td.profit-cell { font-weight: 600; }
   .range-table td.profit-cell.gain { color: var(--profit-text); }
@@ -299,30 +304,6 @@
     font-size: 14px;
   }
 
-  /* 區間試算摘要區塊 */
-  .range-summary {
-    background: var(--bg-input);
-    border: 1px solid var(--border-soft);
-    border-radius: 3px;
-    padding: 12px 14px;
-    margin-bottom: 4px;
-  }
-  .range-summary-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 0;
-    font-size: 14px;
-  }
-  .range-summary-row .label { color: var(--text-muted); }
-  .range-summary-row .value {
-    color: var(--text-strong);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  .range-summary-row.big .value { font-size: 18px; }
-  .range-summary-row .value.gain-text { color: var(--profit-text); }
-  .range-summary-row .value.lose-text { color: var(--loss-text); }
 
   .card {
     background: var(--bg-card);
@@ -777,16 +758,16 @@
         </div><!-- /tab-content detail -->
 
         <div class="tab-content" data-tab="range" role="tabpanel" hidden>
-          <div class="range-summary">
-            <div class="range-summary-row">
+          <div class="result-section">
+            <div class="result-row">
               <span class="label" id="rangeFixedLabel">買進總成本</span>
               <span class="value" id="rangeFixedValue">-</span>
             </div>
-            <div class="range-summary-row">
+            <div class="result-row">
               <span class="label" id="rangeBreakevenLabel">損益兩平賣價</span>
               <span class="value" id="rangeBreakeven">-</span>
             </div>
-            <div class="range-summary-row big">
+            <div class="result-row big" id="rangeCenterProfitRow">
               <span class="label" id="rangeCenterProfitLabel">中心賣價損益</span>
               <span class="value" id="rangeCenterProfit">-</span>
             </div>
@@ -1176,6 +1157,7 @@
     const elBe = $('rangeBreakeven');
     const elCpLabel = $('rangeCenterProfitLabel');
     const elCp = $('rangeCenterProfit');
+    const elCpRow = $('rangeCenterProfitRow');
     const elPriceLabel = $('rangePriceLabel');
 
     // 動態標籤
@@ -1189,7 +1171,7 @@
       elFixedValue.textContent = '-';
       elBe.textContent = '-';
       elCp.textContent = '-';
-      elCp.className = 'value';
+      elCpRow.className = 'result-row big';
       return;
     }
 
@@ -1231,7 +1213,7 @@
       const cp = centerRow.profit;
       const sign = cp > 0 ? '+' : '';
       elCp.textContent = sign + fmtMoney(cp);
-      elCp.className = 'value ' + (cp > 0 ? 'gain-text' : (cp < 0 ? 'lose-text' : ''));
+      elCpRow.className = 'result-row big ' + (cp >= 0 ? 'profit' : 'loss');
     }
 
     body.innerHTML = rows.map(r => {
