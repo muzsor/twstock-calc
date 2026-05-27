@@ -1,10 +1,13 @@
 # 台股交易計算機
 
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PWA](https://img.shields.io/badge/PWA-ready-success.svg)](#開發)
 
 線上試算台股交易的手續費、證交稅、借券費與實際損益，並反推損益兩平價、目標報酬價。
 
 > 🔗 **線上版**: https://muzsor.github.io/twstock-calc/
+> 📋 **變更紀錄**: [CHANGELOG.md](CHANGELOG.md)
 
 ## 預覽
 
@@ -103,7 +106,21 @@ python -m http.server 8765
 # 然後開 http://localhost:8765/
 ```
 
-或直接以 `file://` 協議開啟 `index.html`(`navigator.clipboard` 在 file:// 下會 fallback 到 `execCommand`)。
+或直接以 `file://` 協議開啟 `index.html`(`navigator.clipboard` 在 file:// 下會 fallback 到 `execCommand`,Service Worker 在 file:// 下會自動跳過)。
+
+### PWA(可加到主畫面)
+
+線上版(HTTPS)或本機 http server 下,瀏覽器會自動註冊 Service Worker:
+
+- **Android Chrome**:網址列出現「安裝」icon → 加到桌面變獨立 app
+- **iOS Safari**:「分享 → 加到主畫面」
+- **離線可用**:首次造訪後完全離線(cache-first 策略)
+
+### 版本管理
+
+- 版本號採 [Semantic Versioning](https://semver.org/lang/zh-TW/),變更記錄於 [CHANGELOG.md](CHANGELOG.md)
+- 改版只需更新 `index.html` 的 `const APP_VERSION`,SW 會自動換新 cache
+- footer 右下顯示當前版本號
 
 ### 單元測試
 
@@ -120,6 +137,7 @@ UI 互動(reset/copy/snap 按鈕、localStorage 持久化、滾輪、direction �
 - 🚫 沒有任何 fetch / XHR / WebSocket — 計算結果不離開瀏覽器
 - 🚫 沒有 analytics、tracking、cookies
 - 🚫 沒有第三方 CDN 依賴(連 favicon 都是 inline SVG)
+- 🚫 Service Worker 只快取本地資源(`index.html` / `tests.html` / `manifest.json` / `icons/icon.svg`),**跨域請求一律跳過、不代理**
 - ✅ localStorage 是 per-origin，使用者輸入只存在自己的瀏覽器
 
 ## 免責聲明

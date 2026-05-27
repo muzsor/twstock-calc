@@ -32,7 +32,12 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="台股交易計算機">
 <meta name="twitter:description" content="試算手續費、證交稅、借券費與實際損益。">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>">
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>">
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon.svg" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icons/icon-light.svg" media="(prefers-color-scheme: light)">
+<link rel="apple-touch-icon" href="icons/icon.svg">
 <style>
   /* ============================================================
      Theme tokens — light is default, dark overrides via [data-theme="dark"]
@@ -540,6 +545,13 @@
     margin-top: 18px;
     line-height: 1.8;
   }
+  .version-tag {
+    display: block;
+    margin-top: 10px;
+    font-size: 10px;
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+  }
 
   .toast {
     position: fixed;
@@ -667,11 +679,13 @@
     border-color: var(--warn-color);
     box-shadow: 0 0 0 2px var(--warn-shadow);
   }
-  .field.has-error .snap-target {
+  .field.has-error .snap-target,
+  .field.has-error .number-stepper {
     border-color: var(--err-color);
     box-shadow: 0 0 0 2px var(--err-shadow);
   }
-  .field.has-warn .snap-target {
+  .field.has-warn .snap-target,
+  .field.has-warn .number-stepper {
     border-color: var(--warn-color);
     box-shadow: 0 0 0 2px var(--warn-shadow);
   }
@@ -689,6 +703,79 @@
     display: block;
     color: var(--warn-color);
   }
+
+  /* B6 — 步進按鈕 (input 右側兩顆,觸控目標 ≥44px) */
+  .number-stepper {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--bg-input);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .number-stepper:hover { border-color: var(--border-hover); }
+  .number-stepper:focus-within {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .number-stepper input[type=number] {
+    flex: 1;
+    min-width: 0;
+    width: 0;          /* 從 0 起算讓 flex 撐大;auto 會用 input.size 內在寬度撐爆父層 min-content */
+    border: none;
+    background: transparent;
+    border-radius: 0;
+    padding: 10px 12px;
+  }
+  .number-stepper input[type=number]:focus {
+    outline: none;
+    box-shadow: none;
+    border-color: transparent;
+  }
+  .stepper-btn {
+    flex: 0 0 44px;
+    min-height: 44px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: var(--bg-btn);
+    color: var(--text-secondary);
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1;
+    font-family: inherit;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: background 0.1s, color 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stepper-btn:hover {
+    background: var(--bg-btn-hover);
+    color: var(--text-strong);
+  }
+  .stepper-btn:active,
+  .stepper-btn.holding {
+    background: var(--bg-highlight);
+    color: var(--text-strong);
+  }
+  .stepper-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--focus-ring);
+  }
+  .stepper-btn[data-step="dec"]::before { content: '−'; }
+  .stepper-btn[data-step="inc"]::before { content: '+'; }
+
+  /* B6 — 區間試算表 wrap,防止窄螢幕擠爆 */
+  .range-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 12px;
+  }
+  .range-table-wrap .range-table { margin-top: 0; }
 
   /* 齒輪按鈕 (進階設定觸發) */
   .gear-btn {
@@ -867,13 +954,121 @@
     margin-top: 18px;
   }
 
+  /* Mobile sticky 結果列 — 桌面隱藏,行動才顯示 */
+  .mobile-result-bar { display: none; }
+
   @media (max-width: 760px) {
-    body { padding: 12px; }
+    body {
+      padding: 12px;
+      padding-bottom: calc(68px + env(safe-area-inset-bottom));  /* 預留底部 bar 空間 */
+    }
     .layout { grid-template-columns: 1fr; gap: 14px; }
     .row { grid-template-columns: 1fr; }
     header h1 { font-size: 24px; }
     .card { padding: 18px; }
     .result-row.big .value { font-size: 21px; }
+    /* B6 — 行動裝置觸控目標加大 */
+    .btn-group button {
+      min-height: 44px;
+      padding: 11px 10px;
+      font-size: 14px;
+    }
+    .snap-action { min-height: 44px; }
+    .snap-target { min-height: 44px; }
+
+    /* 底部 sticky 結果列 */
+    .mobile-result-bar {
+      display: block;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 200;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+      padding-bottom: env(safe-area-inset-bottom);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .mobile-result-bar.hidden-by-scroll {
+      opacity: 0;
+      transform: translateY(100%);
+      pointer-events: none;
+    }
+    :root[data-theme="dark"] .mobile-result-bar {
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .mobile-result-bar-tap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 56px;
+      padding: 8px 14px;
+      background: transparent;
+      border: none;
+      font-family: inherit;
+      color: var(--text);
+      cursor: pointer;
+      text-align: left;
+      touch-action: manipulation;
+    }
+    .mobile-result-bar-tap:active { background: var(--bg-highlight); }
+    .mobile-result-bar-profit {
+      font-size: 16px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-strong);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .mobile-result-bar.profit .mobile-result-bar-profit { color: var(--profit-text); }
+    .mobile-result-bar.loss   .mobile-result-bar-profit { color: var(--loss-text); }
+    .mobile-result-bar-return {
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .mobile-result-bar.profit .mobile-result-bar-return { color: var(--profit-text); }
+    .mobile-result-bar.loss   .mobile-result-bar-return { color: var(--loss-text); }
+    .mobile-result-bar-track {
+      position: relative;
+      flex: 1;
+      min-width: 40px;
+      height: 6px;
+      background: var(--bg-highlight);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .mobile-result-bar-zero {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      margin-left: -0.5px;
+      background: var(--border-strong);
+      opacity: 0.4;
+    }
+    .mobile-result-bar-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: var(--profit-bg);
+      transition: left 0.25s, right 0.25s, background 0.25s;
+    }
+    .mobile-result-bar-fill.loss { background: var(--loss-bg); }
+    .mobile-result-bar-cta {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      white-space: nowrap;
+      padding-left: 4px;
+    }
   }
 </style>
 </head>
@@ -958,13 +1153,21 @@
         <div class="row">
           <div class="field">
             <label id="buyPriceLabel" for="buyPrice">買進價格 (元)</label>
-            <input type="number" id="buyPrice" value="100" step="0.5" min="0" inputmode="decimal">
+            <div class="number-stepper">
+              <input type="number" id="buyPrice" value="100" step="0.5" min="0" inputmode="decimal">
+              <button type="button" class="stepper-btn" data-step="dec" aria-label="減少買進價格"></button>
+              <button type="button" class="stepper-btn" data-step="inc" aria-label="增加買進價格"></button>
+            </div>
             <div class="help" id="buyTickHint">升降單位 NT$ 0.50</div>
             <div class="field-error" id="buyPriceError" role="alert"></div>
           </div>
           <div class="field">
             <label id="sellPriceLabel" for="sellPrice">賣出價格 (元)</label>
-            <input type="number" id="sellPrice" value="110" step="0.5" min="0" inputmode="decimal">
+            <div class="number-stepper">
+              <input type="number" id="sellPrice" value="110" step="0.5" min="0" inputmode="decimal">
+              <button type="button" class="stepper-btn" data-step="dec" aria-label="減少賣出價格"></button>
+              <button type="button" class="stepper-btn" data-step="inc" aria-label="增加賣出價格"></button>
+            </div>
             <div class="help" id="sellTickHint">升降單位 NT$ 0.50</div>
             <div class="field-error" id="sellPriceError" role="alert"></div>
           </div>
@@ -972,7 +1175,11 @@
 
         <div class="field">
           <label for="quantity">交易數量</label>
-          <input type="number" id="quantity" value="1" step="1" min="0" inputmode="numeric">
+          <div class="number-stepper">
+            <input type="number" id="quantity" value="1" step="1" min="0" inputmode="numeric">
+            <button type="button" class="stepper-btn" data-step="dec" aria-label="減少數量"></button>
+            <button type="button" class="stepper-btn" data-step="inc" aria-label="增加數量"></button>
+          </div>
           <div class="btn-group" id="unitGroup" role="group" aria-label="數量單位">
             <button type="button" data-unit="lot" class="active" aria-pressed="true">張 (1000股)</button>
             <button type="button" data-unit="share" aria-pressed="false">股 (零股)</button>
@@ -1136,18 +1343,20 @@
             </div>
           </div>
 
-          <table class="range-table">
-            <thead>
-              <tr>
-                <th id="rangePriceLabel">賣出價</th>
-                <th>損益試算</th>
-                <th>報酬率</th>
-              </tr>
-            </thead>
-            <tbody id="rangeTableBody">
-              <tr><td colspan="3" class="empty">請於左側輸入價格與數量</td></tr>
-            </tbody>
-          </table>
+          <div class="range-table-wrap">
+            <table class="range-table">
+              <thead>
+                <tr>
+                  <th id="rangePriceLabel">賣出價</th>
+                  <th>損益試算</th>
+                  <th>報酬率</th>
+                </tr>
+              </thead>
+              <tbody id="rangeTableBody">
+                <tr><td colspan="3" class="empty">請於左側輸入價格與數量</td></tr>
+              </tbody>
+            </table>
+          </div>
 
           <div class="help" style="margin-top: 12px; line-height: 1.7;">
             ※ 表格以左側<strong>賣出價(做多)</strong>或<strong>回補價(做空)</strong>為中心,上下各 <span id="rangeHalfText">5</span> 個升降單位共 <span id="rangeTotalText">11</span> 列<br>
@@ -1163,10 +1372,23 @@
       ※ 現股當沖證交稅減半至 2027/12/31 止 (政策可能變更,請以最新法規為準)<br>
       ※ 借券費率因券商與商品而異,實際以證商規定為準<br>
       ※ 開發者不對計算結果之準確性負任何責任,實際損益以券商交割單為主
+      <span class="version-tag" id="appVersionTag"></span>
     </div>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="mobile-result-bar" id="mobileResultBar" role="status" aria-live="polite">
+    <button type="button" class="mobile-result-bar-tap" id="mobileBarTap" aria-label="跳到完整結果">
+      <span class="mobile-result-bar-profit" id="mobileBarProfit">-</span>
+      <span class="mobile-result-bar-return" id="mobileBarReturn">-</span>
+      <span class="mobile-result-bar-track" aria-hidden="true">
+        <span class="mobile-result-bar-zero"></span>
+        <span class="mobile-result-bar-fill" id="mobileBarFill" style="left:50%;right:50%"></span>
+      </span>
+      <span class="mobile-result-bar-cta" aria-hidden="true">詳情 →</span>
+    </button>
+  </div>
 
   <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogText">
     <div class="confirm-dialog-body">
@@ -1183,6 +1405,7 @@
 
 <script>
   const $ = id => document.getElementById(id);
+  const APP_VERSION = '1.1.0';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const THEME_KEY = 'twStockCalc.theme';  // 主題獨立 key (供 head 內早於 style 的 script 讀取)
   const TAB_KEY = 'twStockCalc.activeTab';
@@ -1199,6 +1422,10 @@
   const TAX_RATES = { stock: 0.003, etf: 0.001, daytrade: 0.0015, none: 0 };
   const FEE_RATE = 0.001425;
   const THEME_COLORS = { light: '#f5f5f5', dark: '#000000' };  // 對應 meta theme-color
+  // Favicon 雙版本 (data URL,瞬間切換無 network 請求)
+  //   light = 白底 + 灰邊 (在淺色瀏覽器分頁仍可見);dark = 黑底
+  const FAVICON_DARK  = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>";
+  const FAVICON_LIGHT = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='0.5' y='0.5' width='31' height='31' fill='%23fff' stroke='%23d0d0d0' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>";
   const RANGE_HALF_OPTIONS = [5, 10, 20];  // B9 可選的上下列數
   const RANGE_HALF_DEFAULT = 5;
   const RETURN_BAR_CAP = 10;  // B10 進度條視覺上限 ±10%
@@ -1467,6 +1694,9 @@
     document.documentElement.setAttribute('data-theme-mode', mode);
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) metaThemeColor.setAttribute('content', THEME_COLORS[effective]);
+    // Favicon 隨主題切換 (深色用黑底版,淺色用白底+灰邊版)
+    const favicon = $('favicon');
+    if (favicon) favicon.href = effective === 'dark' ? FAVICON_DARK : FAVICON_LIGHT;
     try { localStorage.setItem(THEME_KEY, mode); } catch (_) {}
     syncToggleGroups();
   }
@@ -1527,17 +1757,13 @@
   }
 
   // ============================================================
-  // B10 — 報酬率視覺進度條
-  //   視覺範圍 ±RETURN_BAR_CAP%,超出時加 overflow 條紋表示
+  // 通用:把 returnRate 套到 ±cap% 視覺範圍的填充條 (left/right %)
+  //   fill 元素需有 position:absolute, top/bottom:0
   // ============================================================
-  function updateReturnBar(rr) {
-    const bar = $('returnBar');
-    const fill = $('returnBarFill');
-    if (!bar || !fill) return;
-    const cap = RETURN_BAR_CAP;
+  function applyBarFill(fill, rr, cap) {
     const valid = isFinite(rr);
     const clipped = valid ? Math.max(-cap, Math.min(cap, rr)) : 0;
-    const absPct = Math.abs(clipped) / cap * 50;  // 0 ~ 50 (% of track width)
+    const absPct = Math.abs(clipped) / cap * 50;
     if (clipped >= 0) {
       fill.style.left = '50%';
       fill.style.right = (50 - absPct) + '%';
@@ -1546,9 +1772,40 @@
       fill.style.left = (50 - absPct) + '%';
     }
     fill.classList.toggle('loss', clipped < 0);
-    bar.classList.toggle('overflow', valid && Math.abs(rr) > cap);
-    bar.classList.toggle('overflow-pos', valid && rr > cap);
-    bar.classList.toggle('overflow-neg', valid && rr < -cap);
+  }
+
+  // ============================================================
+  // B10 — 報酬率視覺進度條
+  //   視覺範圍 ±RETURN_BAR_CAP%,超出時加 overflow 條紋表示
+  // ============================================================
+  function updateReturnBar(rr) {
+    const bar = $('returnBar');
+    const fill = $('returnBarFill');
+    if (!bar || !fill) return;
+    applyBarFill(fill, rr, RETURN_BAR_CAP);
+    const valid = isFinite(rr);
+    bar.classList.toggle('overflow', valid && Math.abs(rr) > RETURN_BAR_CAP);
+    bar.classList.toggle('overflow-pos', valid && rr > RETURN_BAR_CAP);
+    bar.classList.toggle('overflow-neg', valid && rr < -RETURN_BAR_CAP);
+  }
+
+  // 行動底部 sticky 結果列 — 同步損益、報酬率、進度填充
+  function updateMobileBar(profit, returnRate) {
+    const bar = $('mobileResultBar');
+    if (!bar) return;
+    const profitEl = $('mobileBarProfit');
+    const returnEl = $('mobileBarReturn');
+    const fill = $('mobileBarFill');
+    if (profitEl) {
+      profitEl.textContent = (profit > 0 ? '+' : '') + fmtMoney(profit);
+    }
+    if (returnEl) {
+      returnEl.textContent = (returnRate > 0 ? '+' : '')
+        + (isFinite(returnRate) ? returnRate.toFixed(2) : '0.00') + '%';
+    }
+    bar.classList.toggle('profit', profit > 0);
+    bar.classList.toggle('loss',   profit < 0);
+    if (fill) applyBarFill(fill, returnRate, RETURN_BAR_CAP);
   }
 
   // ============================================================
@@ -1595,6 +1852,7 @@
     $('profitRow').className = 'result-row big ' + cls;
     $('returnRow').className = 'result-row ' + cls;
     updateReturnBar(returnRate);
+    updateMobileBar(profit, returnRate);
 
     // 共用設定 (discount, minFee) 變動時,也同步更新區間試算
     renderRangeTable();
@@ -2031,6 +2289,30 @@
     if (e.key === 'Escape') closeAllPopovers();
   });
 
+  // 行動底部結果列 — 點擊滾到結果卡片
+  const mobileBarTap = $('mobileBarTap');
+  if (mobileBarTap) {
+    mobileBarTap.addEventListener('click', () => {
+      const resultCard = document.querySelector('.layout > .card:nth-child(2)');
+      if (resultCard) resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  // 行動底部結果列 — 結果卡片進入視窗時自動隱藏 (避免冗餘資訊)
+  function setupMobileBarAutoHide() {
+    const bar = $('mobileResultBar');
+    const resultCard = document.querySelector('.layout > .card:nth-child(2)');
+    if (!bar || !resultCard || !('IntersectionObserver' in window)) return;
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        // 結果卡片 ≥50% 進入視窗才視為「夠看」→ 隱藏底部 bar (使用者可以看到關鍵的損益區塊)
+        bar.classList.toggle('hidden-by-scroll', entry.intersectionRatio > 0.5);
+      });
+    }, { threshold: [0, 0.3, 0.5, 0.7] });
+    observer.observe(resultCard);
+  }
+  setupMobileBarAutoHide();
+
   $('themeGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
     applyTheme(e.target.dataset.theme);
@@ -2085,6 +2367,60 @@
     });
   }
 
+  // B6 — 步進按鈕:單擊 ±step,長按 350ms 後 100ms/次連續
+  //   pointer 事件兼容滑鼠與觸控;沿用 input.step / min / max
+  function attachSteppers() {
+    const HOLD_DELAY = 350;
+    const REPEAT_MS = 100;
+    document.querySelectorAll('.number-stepper').forEach(wrap => {
+      const input = wrap.querySelector('input[type=number]');
+      if (!input) return;
+      wrap.querySelectorAll('.stepper-btn').forEach(btn => {
+        const dir = btn.dataset.step === 'inc' ? 1 : -1;
+        let holdTimer = null, repeatTimer = null;
+        const doStep = () => {
+          if (input.disabled || input.readOnly) return;
+          const step = parseFloat(input.step) || 1;
+          const min  = input.min !== '' ? parseFloat(input.min) : null;
+          const max  = input.max !== '' ? parseFloat(input.max) : null;
+          const cur  = parseFloat(input.value) || 0;
+          let next = cur + dir * step;
+          if (min !== null && next < min) next = min;
+          if (max !== null && next > max) next = max;
+          const decimals = ((input.step || '1').split('.')[1] || '').length;
+          input.value = next.toFixed(decimals);
+          input.dispatchEvent(new Event('input',  { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        const stop = () => {
+          clearTimeout(holdTimer);
+          clearInterval(repeatTimer);
+          holdTimer = repeatTimer = null;
+          btn.classList.remove('holding');
+        };
+        btn.addEventListener('pointerdown', e => {
+          e.preventDefault();  // 避免觸控時連動 focus 行為
+          doStep();
+          btn.classList.add('holding');
+          holdTimer = setTimeout(() => {
+            repeatTimer = setInterval(doStep, REPEAT_MS);
+          }, HOLD_DELAY);
+        });
+        // pointer 離開或鬆開都要停止
+        ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(ev =>
+          btn.addEventListener(ev, stop)
+        );
+        // 鍵盤可訪問:Enter / Space 觸發單擊 (long-press 對鍵盤不適用)
+        btn.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            doStep();
+          }
+        });
+      });
+    });
+  }
+
   // 為 tests.html 暴露純函數 (iframe 透過 window.__calc 存取)
   window.__calc = {
     fmtNum, fmtMoney, round2, getTickSize, formatDiscount,
@@ -2111,8 +2447,23 @@
   syncToggleGroups();
   updateDirectionUI();
   attachWheelToNumberInputs();
+  attachSteppers();
   calculate();
   switchTab(activeTab);
+
+  // Footer 版本標示
+  const versionTag = $('appVersionTag');
+  if (versionTag) versionTag.textContent = 'v' + APP_VERSION;
+
+  // PWA — 註冊 Service Worker
+  //   - 帶 ?v=APP_VERSION:版本變動會被視為新 SW → 自動清舊 cache + 立即接管
+  //   - 跳過 file:// 協議 (SW 在 file:// 不工作,避免無謂 console error)
+  //   - 失敗無聲,不影響網頁本身功能
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION).catch(() => {});
+    });
+  }
 </script>
 </body>
 </html>
