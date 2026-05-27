@@ -564,6 +564,309 @@
   }
   .toast.err { background: var(--profit-bg); }
 
+  /* B9 — 區間試算範圍切換 (inline 小型 btn-group) */
+  .range-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .range-controls-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .btn-group-inline {
+    margin-top: 0;
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+  .btn-group-inline button {
+    flex: 0 0 auto;
+    min-width: 56px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  /* B10 — 報酬率視覺進度條 (中心 0%, 視覺範圍 ±10%) */
+  .return-bar {
+    margin: -2px 10px 12px;
+    padding: 0;
+  }
+  .return-bar-track {
+    position: relative;
+    height: 8px;
+    background: var(--bg-highlight);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .return-bar-zero {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    margin-left: -0.5px;
+    background: var(--border-strong);
+    opacity: 0.5;
+    z-index: 1;
+  }
+  .return-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--profit-bg);
+    transition: left 0.25s ease, right 0.25s ease, background 0.25s;
+  }
+  .return-bar-fill.loss { background: var(--loss-bg); }
+  .return-bar-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .return-bar.overflow .return-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.35) 0,
+      rgba(255,255,255,0.35) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+  }
+  .return-bar.overflow-pos .return-bar-fill::after { right: 0; }
+  .return-bar.overflow-neg .return-bar-fill::after { left: 0; }
+
+  /* B12 — 輸入驗證錯誤/警示樣式 */
+  :root {
+    --err-color: #d4302a;
+    --err-shadow: rgba(212, 48, 42, 0.15);
+    --warn-color: #d97706;
+    --warn-shadow: rgba(217, 119, 6, 0.15);
+  }
+  :root[data-theme="dark"] {
+    --err-color: #ff5050;
+    --err-shadow: rgba(255, 80, 80, 0.2);
+    --warn-color: #fbbf24;
+    --warn-shadow: rgba(251, 191, 36, 0.2);
+  }
+  .field.has-error > input,
+  .field.has-error > select {
+    border-color: var(--err-color);
+    box-shadow: 0 0 0 2px var(--err-shadow);
+  }
+  .field.has-warn > input,
+  .field.has-warn > select {
+    border-color: var(--warn-color);
+    box-shadow: 0 0 0 2px var(--warn-shadow);
+  }
+  .field.has-error .snap-target {
+    border-color: var(--err-color);
+    box-shadow: 0 0 0 2px var(--err-shadow);
+  }
+  .field.has-warn .snap-target {
+    border-color: var(--warn-color);
+    box-shadow: 0 0 0 2px var(--warn-shadow);
+  }
+  .field-error {
+    font-size: 12px;
+    margin-top: 4px;
+    line-height: 1.5;
+    display: none;
+  }
+  .field.has-error .field-error {
+    display: block;
+    color: var(--err-color);
+  }
+  .field.has-warn .field-error {
+    display: block;
+    color: var(--warn-color);
+  }
+
+  /* 齒輪按鈕 (進階設定觸發) */
+  .gear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .gear-btn:hover,
+  .gear-btn[aria-expanded="true"] {
+    background: var(--bg-btn-hover);
+    border-color: var(--border);
+    color: var(--text-strong);
+  }
+  .gear-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .gear-btn svg { width: 18px; height: 18px; display: block; }
+
+  /* Popover (浮動設定面板) — 非 modal,點外面或 ESC 關閉 */
+  .popover-host {
+    position: relative;
+    display: inline-block;
+  }
+  .popover-host[hidden] { display: none; }
+  .popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 100;
+    width: min(420px, calc(100vw - 24px));
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  }
+  :root[data-theme="dark"] .popover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
+  .popover[hidden] { display: none; }
+  .popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .popover-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .popover-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .popover-close:hover {
+    background: var(--bg-btn-hover);
+    color: var(--text-strong);
+  }
+  .popover-body { padding: 20px; }
+  .popover-body > *:last-child { margin-bottom: 0; }
+
+  /* Popover 內加大輸入/按鈕 — 電腦與手機都好操作 (≥40px 觸控目標) */
+  .popover-body .field { margin-bottom: 18px; }
+  .popover-body .field label {
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+  .popover-body .field input,
+  .popover-body .field select {
+    padding: 12px 14px;
+    font-size: 18px;
+  }
+  .popover-body .btn-group { gap: 8px; }
+  .popover-body .btn-group button {
+    padding: 11px 8px;
+    font-size: 14px;
+  }
+  .popover-body .btn-group-inline { gap: 8px; }
+  .popover-body .btn-group-inline button {
+    min-width: 78px;
+    padding: 12px 22px;
+    font-size: 15px;
+  }
+  .popover-body .range-controls {
+    gap: 14px;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+  }
+  .popover-body .range-controls-label {
+    font-size: 15px;
+  }
+  .popover-body .help {
+    font-size: 13px;
+  }
+
+  /* Card header row — 包覆 tabs + 區間齒輪,讓齒輪與 tab 同列(不再另佔一行) */
+  .card-header-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .card-header-row .card-tabs {
+    border-bottom: none;
+    margin-bottom: 0;
+    flex: 1;
+  }
+  .card-header-row .popover-host {
+    margin-bottom: 6px;
+  }
+
+  /* Confirm dialog (重置警告) */
+  dialog.confirm-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;  /* 配合 inset:0 達成置中,覆蓋全域 * { margin: 0 } reset */
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0;
+    background: var(--bg-card);
+    color: var(--text);
+    max-width: 380px;
+    min-width: 280px;
+    width: min(380px, calc(100vw - 32px));
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+    font-family: inherit;
+  }
+  dialog.confirm-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  :root[data-theme="dark"] dialog.confirm-dialog {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  }
+  :root[data-theme="dark"] dialog.confirm-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .confirm-dialog-body { padding: 20px 22px; }
+  .confirm-dialog-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-strong);
+    margin-bottom: 8px;
+  }
+  .confirm-dialog-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .confirm-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
   @media (max-width: 760px) {
     body { padding: 12px; }
     .layout { grid-template-columns: 1fr; gap: 14px; }
@@ -594,7 +897,55 @@
 
     <div class="layout">
       <div class="card">
-        <h2>交易條件</h2>
+        <h2>
+          交易條件
+          <div class="popover-host" style="margin-left:auto;">
+            <button type="button" class="gear-btn" id="condGearBtn" aria-label="進階設定:手續費折扣與最低手續費" aria-haspopup="dialog" aria-expanded="false" aria-controls="condGearPopover">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+            <div class="popover" id="condGearPopover" hidden role="dialog" aria-label="進階設定">
+              <div class="popover-header">
+                <span class="popover-title">進階設定</span>
+                <button type="button" class="popover-close" data-close-popover aria-label="關閉設定">×</button>
+              </div>
+              <div class="popover-body" id="condGearBody">
+                <div class="field">
+                  <label for="discount">手續費折扣 (券商給的折數)</label>
+                  <input type="number" id="discount" value="1" step="0.01" min="0.01" max="1" inputmode="decimal">
+                  <div class="btn-group" id="discountGroup" role="group" aria-label="手續費折扣">
+                    <button type="button" data-discount="1" class="active" aria-pressed="true">原價</button>
+                    <button type="button" data-discount="0.6" aria-pressed="false">6折</button>
+                    <button type="button" data-discount="0.5" aria-pressed="false">5折</button>
+                    <button type="button" data-discount="0.38" aria-pressed="false">3.8折</button>
+                    <button type="button" data-discount="0.28" aria-pressed="false">2.8折</button>
+                  </div>
+                  <div class="help">手續費 = 成交金額 × 0.1425% × 折數,最低 20 元</div>
+                  <div class="field-error" id="discountError" role="alert"></div>
+                </div>
+
+                <div class="field">
+                  <label for="minFee">最低手續費 (元)</label>
+                  <input type="number" id="minFee" value="20" step="1" min="0" inputmode="numeric">
+                  <div class="help">多數券商最低 20 元,部分電子下單可降至 1 元或不設下限</div>
+                  <div class="field-error" id="minFeeError" role="alert"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </h2>
+
+        <div class="field">
+          <label>商品類型 (證交稅率)</label>
+          <div class="btn-group" id="productTypeGroup" role="group" aria-label="商品類型">
+            <button type="button" data-product="stock" class="active" aria-pressed="true">一般 (0.3%)</button>
+            <button type="button" data-product="etf" aria-pressed="false">ETF (0.1%)</button>
+            <button type="button" data-product="daytrade" aria-pressed="false">當沖 (0.15%)</button>
+            <button type="button" data-product="none" aria-pressed="false">免稅</button>
+          </div>
+        </div>
 
         <div class="field">
           <label>交易方向</label>
@@ -609,12 +960,25 @@
             <label id="buyPriceLabel" for="buyPrice">買進價格 (元)</label>
             <input type="number" id="buyPrice" value="100" step="0.5" min="0" inputmode="decimal">
             <div class="help" id="buyTickHint">升降單位 NT$ 0.50</div>
+            <div class="field-error" id="buyPriceError" role="alert"></div>
           </div>
           <div class="field">
             <label id="sellPriceLabel" for="sellPrice">賣出價格 (元)</label>
             <input type="number" id="sellPrice" value="110" step="0.5" min="0" inputmode="decimal">
             <div class="help" id="sellTickHint">升降單位 NT$ 0.50</div>
+            <div class="field-error" id="sellPriceError" role="alert"></div>
           </div>
+        </div>
+
+        <div class="field">
+          <label for="quantity">交易數量</label>
+          <input type="number" id="quantity" value="1" step="1" min="0" inputmode="numeric">
+          <div class="btn-group" id="unitGroup" role="group" aria-label="數量單位">
+            <button type="button" data-unit="lot" class="active" aria-pressed="true">張 (1000股)</button>
+            <button type="button" data-unit="share" aria-pressed="false">股 (零股)</button>
+          </div>
+          <div class="btn-group" id="qtyPresets"></div>
+          <div class="field-error" id="quantityError" role="alert"></div>
         </div>
 
         <div class="field">
@@ -629,45 +993,7 @@
             </div>
           </div>
           <div class="help">會把另一邊的價格自動帶到 ≥ 目標的合法升降單位</div>
-        </div>
-
-        <div class="field">
-          <label for="quantity">交易數量</label>
-          <input type="number" id="quantity" value="1" step="1" min="0" inputmode="numeric">
-          <div class="btn-group" id="unitGroup" role="group" aria-label="數量單位">
-            <button type="button" data-unit="lot" class="active" aria-pressed="true">張 (1000股)</button>
-            <button type="button" data-unit="share" aria-pressed="false">股 (零股)</button>
-          </div>
-          <div class="btn-group" id="qtyPresets"></div>
-        </div>
-
-        <div class="field">
-          <label>商品類型 (證交稅率)</label>
-          <div class="btn-group" id="productTypeGroup" role="group" aria-label="商品類型">
-            <button type="button" data-product="stock" class="active" aria-pressed="true">一般 (0.3%)</button>
-            <button type="button" data-product="etf" aria-pressed="false">ETF (0.1%)</button>
-            <button type="button" data-product="daytrade" aria-pressed="false">當沖 (0.15%)</button>
-            <button type="button" data-product="none" aria-pressed="false">免稅</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="discount">手續費折扣 (券商給的折數)</label>
-          <input type="number" id="discount" value="1" step="0.01" min="0.01" max="1" inputmode="decimal">
-          <div class="btn-group" id="discountGroup" role="group" aria-label="手續費折扣">
-            <button type="button" data-discount="1" class="active" aria-pressed="true">原價</button>
-            <button type="button" data-discount="0.6" aria-pressed="false">6折</button>
-            <button type="button" data-discount="0.5" aria-pressed="false">5折</button>
-            <button type="button" data-discount="0.38" aria-pressed="false">3.8折</button>
-            <button type="button" data-discount="0.28" aria-pressed="false">2.8折</button>
-          </div>
-          <div class="help">手續費 = 成交金額 × 0.1425% × 折數,最低 20 元</div>
-        </div>
-
-        <div class="field">
-          <label for="minFee">最低手續費 (元)</label>
-          <input type="number" id="minFee" value="20" step="1" min="0" inputmode="numeric">
-          <div class="help">多數券商最低 20 元,部分電子下單可降至 1 元或不設下限</div>
+          <div class="field-error" id="targetReturnError" role="alert"></div>
         </div>
 
         <div class="row" id="borrowField" style="display:none">
@@ -675,19 +1001,47 @@
             <label for="borrowRate">借券費率 (年化 %)</label>
             <input type="number" id="borrowRate" value="0.08" step="0.01" min="0" inputmode="decimal">
             <div class="help">融券放空券商收取,約年化 0.08%~0.1%</div>
+            <div class="field-error" id="borrowRateError" role="alert"></div>
           </div>
           <div class="field" style="margin-bottom:0">
             <label for="borrowDays">持有天數</label>
             <input type="number" id="borrowDays" value="1" step="1" min="0" inputmode="numeric">
             <div class="help">借券費 = 成交金額 × 年化率 × 天數 / 365</div>
+            <div class="field-error" id="borrowDaysError" role="alert"></div>
           </div>
         </div>
       </div><!-- /card 交易條件 -->
 
       <div class="card" aria-live="polite" aria-atomic="false">
-        <div class="card-tabs" id="tabNav" role="tablist" aria-label="結果顯示模式">
-          <button type="button" data-tab="detail" class="active" role="tab" aria-selected="true">詳細試算</button>
-          <button type="button" data-tab="range" role="tab" aria-selected="false">區間試算</button>
+        <div class="card-header-row">
+          <div class="card-tabs" id="tabNav" role="tablist" aria-label="結果顯示模式">
+            <button type="button" data-tab="detail" class="active" role="tab" aria-selected="true">詳細試算</button>
+            <button type="button" data-tab="range" role="tab" aria-selected="false">區間試算</button>
+          </div>
+          <div class="popover-host" id="rangeGearHost" hidden>
+            <button type="button" class="gear-btn" id="rangeGearBtn" aria-label="顯示設定" aria-haspopup="dialog" aria-expanded="false" aria-controls="rangeGearPopover">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+            <div class="popover" id="rangeGearPopover" hidden role="dialog" aria-label="區間試算顯示設定">
+              <div class="popover-header">
+                <span class="popover-title">顯示設定</span>
+                <button type="button" class="popover-close" data-close-popover aria-label="關閉設定">×</button>
+              </div>
+              <div class="popover-body" id="rangeGearBody">
+                <div class="range-controls">
+                  <span class="range-controls-label">顯示範圍</span>
+                  <div class="btn-group btn-group-inline" id="rangeGroup" role="group" aria-label="區間試算顯示範圍">
+                    <button type="button" data-half="5" class="active" aria-pressed="true">±5</button>
+                    <button type="button" data-half="10" aria-pressed="false">±10</button>
+                    <button type="button" data-half="20" aria-pressed="false">±20</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="tab-content" data-tab="detail" role="tabpanel">
@@ -746,6 +1100,15 @@
               <span class="label">報酬率</span>
               <span class="value" id="returnRate">-</span>
             </div>
+            <div class="return-bar" id="returnBar" aria-hidden="true">
+              <div class="return-bar-track">
+                <div class="return-bar-zero"></div>
+                <div class="return-bar-fill" id="returnBarFill" style="left:50%;right:50%"></div>
+              </div>
+              <div class="return-bar-scale">
+                <span>−10%</span><span>0</span><span>+10%</span>
+              </div>
+            </div>
             <div class="result-row">
               <span class="label" id="breakevenLabel">損益兩平賣價</span>
               <span class="value" id="breakeven">-</span>
@@ -787,7 +1150,7 @@
           </table>
 
           <div class="help" style="margin-top: 12px; line-height: 1.7;">
-            ※ 表格以左側<strong>賣出價(做多)</strong>或<strong>回補價(做空)</strong>為中心,上下各 5 個升降單位共 11 列<br>
+            ※ 表格以左側<strong>賣出價(做多)</strong>或<strong>回補價(做空)</strong>為中心,上下各 <span id="rangeHalfText">5</span> 個升降單位共 <span id="rangeTotalText">11</span> 列<br>
             ※ 另一邊的價格與手續費、稅率、借券費皆沿用左側設定
           </div>
         </div><!-- /tab-content range -->
@@ -805,11 +1168,25 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogText">
+    <div class="confirm-dialog-body">
+      <div class="confirm-dialog-title" id="confirmDialogTitle">確定要重置嗎?</div>
+      <div class="confirm-dialog-text" id="confirmDialogText">
+        將清除所有輸入欄位、商品類型、手續費設定與區間範圍,並還原為預設值。此動作無法復原。
+      </div>
+      <div class="confirm-dialog-actions">
+        <button type="button" class="btn-action" id="confirmDialogCancel">取消</button>
+        <button type="button" class="btn-action primary" id="confirmDialogOk">確定重置</button>
+      </div>
+    </div>
+  </dialog>
+
 <script>
   const $ = id => document.getElementById(id);
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const THEME_KEY = 'twStockCalc.theme';  // 主題獨立 key (供 head 內早於 style 的 script 讀取)
   const TAB_KEY = 'twStockCalc.activeTab';
+  const RANGE_KEY = 'twStockCalc.rangeHalf';  // B9 區間試算上下列數
   // 全部輸入欄位都持久化(含買賣價、數量),重新整理可直接接續上次的試算
   const PERSIST_KEYS = ['direction', 'unit', 'buyPrice', 'sellPrice', 'quantity',
                         'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
@@ -822,12 +1199,15 @@
   const TAX_RATES = { stock: 0.003, etf: 0.001, daytrade: 0.0015, none: 0 };
   const FEE_RATE = 0.001425;
   const THEME_COLORS = { light: '#f5f5f5', dark: '#000000' };  // 對應 meta theme-color
-  const RANGE_ROWS_HALF = 5;  // 中心價上下各 N 列 → 總共 2N+1 列 (11)
+  const RANGE_HALF_OPTIONS = [5, 10, 20];  // B9 可選的上下列數
+  const RANGE_HALF_DEFAULT = 5;
+  const RETURN_BAR_CAP = 10;  // B10 進度條視覺上限 ±10%
 
   let unit = DEFAULTS.unit;
   let direction = DEFAULTS.direction;
   let productType = DEFAULTS.productType;
   let activeTab = 'detail';
+  let rangeRowsHalf = RANGE_HALF_DEFAULT;  // B9 動態狀態
   // 從 <head> 早於 style 的 init script 已設好 data-theme-mode,讀回來避免雙重邏輯
   let themeMode = document.documentElement.getAttribute('data-theme-mode') || 'auto';
 
@@ -1060,6 +1440,14 @@
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active);
     });
+    const rg = $('rangeGroup');
+    if (rg) {
+      [...rg.children].forEach(b => {
+        const active = parseInt(b.dataset.half, 10) === rangeRowsHalf;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', active);
+      });
+    }
   }
 
   // ============================================================
@@ -1089,11 +1477,87 @@
   });
 
   // ============================================================
+  // B12 — 輸入驗證
+  //   error (紅) = 阻塞性錯誤,值會讓計算失準
+  //   warn  (黃) = 軟性警示,計算仍可進行
+  // ============================================================
+  const VALIDATORS = {
+    buyPrice:     { type: 'error', test: v => v > 0,                            msg: '請輸入正數' },
+    sellPrice:    { type: 'error', test: v => v > 0,                            msg: '請輸入正數' },
+    quantity:     { type: 'error', test: v => v >= 1 && Number.isInteger(v),    msg: '數量需 ≥ 1 且為整數' },
+    discount:     { type: 'error', test: v => v > 0 && v <= 1,                  msg: '折扣應介於 0 ~ 1 之間 (如 0.6 = 6 折)' },
+    minFee:       { type: 'error', test: v => v >= 0,                           msg: '需 ≥ 0' },
+    borrowDays:   { type: 'error', test: v => v >= 0 && Number.isInteger(v),    msg: '天數需 ≥ 0 整數' },
+    borrowRate:   { type: 'warn',  test: v => v >= 0 && v <= 50,                msg: '年化費率超出常見範圍 (0~50%),請確認' },
+    targetReturn: { type: 'warn',  test: v => v >= -100 && v <= 100,            msg: '報酬率超出常見範圍 (±100%)' },
+  };
+  function validateInputs() {
+    Object.entries(VALIDATORS).forEach(([id, { type, test, msg }]) => {
+      const el = $(id);
+      if (!el) return;
+      // 借券欄在做多時隱藏 → 跳過驗證避免誤標
+      if ((id === 'borrowRate' || id === 'borrowDays') && direction !== 'short') {
+        clearFieldError(id, el);
+        return;
+      }
+      const v = parseFloat(el.value);
+      const valid = isFinite(v) && test(v);
+      const field = el.closest('.field');
+      const errEl = $(id + 'Error');
+      if (valid) {
+        clearFieldError(id, el, field, errEl);
+      } else {
+        if (field) {
+          field.classList.remove(type === 'error' ? 'has-warn' : 'has-error');
+          field.classList.add('has-' + type);
+        }
+        el.setAttribute('aria-invalid', type === 'error' ? 'true' : 'false');
+        el.setAttribute('aria-describedby', id + 'Error');
+        if (errEl) errEl.textContent = msg;
+      }
+    });
+  }
+  function clearFieldError(id, el, field, errEl) {
+    field = field || el.closest('.field');
+    errEl = errEl || $(id + 'Error');
+    if (field) field.classList.remove('has-error', 'has-warn');
+    el.removeAttribute('aria-invalid');
+    el.removeAttribute('aria-describedby');
+    if (errEl) errEl.textContent = '';
+  }
+
+  // ============================================================
+  // B10 — 報酬率視覺進度條
+  //   視覺範圍 ±RETURN_BAR_CAP%,超出時加 overflow 條紋表示
+  // ============================================================
+  function updateReturnBar(rr) {
+    const bar = $('returnBar');
+    const fill = $('returnBarFill');
+    if (!bar || !fill) return;
+    const cap = RETURN_BAR_CAP;
+    const valid = isFinite(rr);
+    const clipped = valid ? Math.max(-cap, Math.min(cap, rr)) : 0;
+    const absPct = Math.abs(clipped) / cap * 50;  // 0 ~ 50 (% of track width)
+    if (clipped >= 0) {
+      fill.style.left = '50%';
+      fill.style.right = (50 - absPct) + '%';
+    } else {
+      fill.style.right = '50%';
+      fill.style.left = (50 - absPct) + '%';
+    }
+    fill.classList.toggle('loss', clipped < 0);
+    bar.classList.toggle('overflow', valid && Math.abs(rr) > cap);
+    bar.classList.toggle('overflow-pos', valid && rr > cap);
+    bar.classList.toggle('overflow-neg', valid && rr < -cap);
+  }
+
+  // ============================================================
   // 主計算
   // ============================================================
   function calculate() {
     updateTickSizes();
     renderQtyPresets();
+    validateInputs();
     const inp = readInputs();
     const { buyPrice, sellPrice, shares, discount, minFee, taxRate, borrowEffRate } = inp;
 
@@ -1130,6 +1594,7 @@
     const cls = profit >= 0 ? 'profit' : 'loss';
     $('profitRow').className = 'result-row big ' + cls;
     $('returnRow').className = 'result-row ' + cls;
+    updateReturnBar(returnRate);
 
     // 共用設定 (discount, minFee) 變動時,也同步更新區間試算
     renderRangeTable();
@@ -1193,8 +1658,9 @@
     const decimals = tick < 1 ? 2 : 0;
 
     // ±N 列圍繞中心 — 由高到低
+    const half = rangeRowsHalf;
     const rows = [];
-    for (let i = RANGE_ROWS_HALF; i >= -RANGE_ROWS_HALF; i--) {
+    for (let i = half; i >= -half; i--) {
       const price = Math.max(0, round2(center + i * tick));
       const buyP = isShort ? price : buyPrice;
       const sellP = isShort ? sellPrice : price;
@@ -1204,6 +1670,11 @@
       });
       rows.push({ price, profit: r.profit, returnRate: r.returnRate, isCenter: i === 0 });
     }
+    // 同步 help 文字裡的 N 與總列數
+    const halfSpan = $('rangeHalfText');
+    const totalSpan = $('rangeTotalText');
+    if (halfSpan) halfSpan.textContent = half;
+    if (totalSpan) totalSpan.textContent = (half * 2 + 1);
 
     // 摘要區
     elFixedValue.textContent = fmtMoney(fixedAmt);
@@ -1243,6 +1714,15 @@
     document.querySelectorAll('.tab-content').forEach(c => {
       c.hidden = c.dataset.tab !== name;
     });
+    // 區間齒輪只在 range tab 顯示;切離時順手關閉自己的 popover (不動條件齒輪)
+    const gearHost = $('rangeGearHost');
+    if (gearHost) gearHost.hidden = (name !== 'range');
+    if (name !== 'range') {
+      const pop = $('rangeGearPopover');
+      const btn = $('rangeGearBtn');
+      if (pop) pop.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
     try { localStorage.setItem(TAB_KEY, name); } catch (_) {}
     if (name === 'range') renderRangeTable();
   }
@@ -1312,11 +1792,13 @@
   // ============================================================
   // 重置 / 複製
   // ============================================================
-  function resetAll() {
+  function doReset() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    try { localStorage.removeItem(RANGE_KEY); } catch (_) {}
     direction = DEFAULTS.direction;
     unit = DEFAULTS.unit;
     productType = DEFAULTS.productType;
+    rangeRowsHalf = RANGE_HALF_DEFAULT;
     $('buyPrice').value     = DEFAULTS.buyPrice;
     $('sellPrice').value    = DEFAULTS.sellPrice;
     $('quantity').value     = DEFAULTS.quantity;
@@ -1329,6 +1811,15 @@
     updateDirectionUI();
     calculate();
     toast('已重置為預設值');
+  }
+  // 重置先跳確認 dialog;不支援 <dialog> 時 fallback 到 confirm()
+  function showResetConfirm() {
+    const dlg = $('confirmDialog');
+    if (dlg && typeof dlg.showModal === 'function') {
+      dlg.showModal();
+    } else if (window.confirm('將清除所有輸入並還原為預設值,確定要繼續嗎?')) {
+      doReset();
+    }
   }
 
   function buildReportText() {
@@ -1437,7 +1928,7 @@
     $(id).addEventListener('input', () => { calculate(); saveSettings(); });
     $(id).addEventListener('change', () => { calculate(); saveSettings(); });
   });
-  $('targetReturn').addEventListener('input', saveSettings);
+  $('targetReturn').addEventListener('input', () => { saveSettings(); validateInputs(); });
 
   $('directionGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
@@ -1482,8 +1973,63 @@
 
   $('snapBreakeven').addEventListener('click', snapToBreakeven);
   $('snapTarget').addEventListener('click', snapToTarget);
-  $('resetBtn').addEventListener('click', resetAll);
+  $('resetBtn').addEventListener('click', showResetConfirm);
   $('copyBtn').addEventListener('click', copyResult);
+
+  // 重置確認 dialog 按鈕
+  const confirmDlg = $('confirmDialog');
+  if (confirmDlg) {
+    $('confirmDialogCancel').addEventListener('click', () => confirmDlg.close());
+    $('confirmDialogOk').addEventListener('click', () => {
+      confirmDlg.close();
+      doReset();
+    });
+    // 點 backdrop 關閉
+    confirmDlg.addEventListener('click', e => {
+      if (e.target === confirmDlg) confirmDlg.close();
+    });
+  }
+
+  // 齒輪 popover 開合
+  function closeAllPopovers() {
+    document.querySelectorAll('.popover').forEach(p => { p.hidden = true; });
+    document.querySelectorAll('.gear-btn[aria-expanded="true"]').forEach(b => {
+      b.setAttribute('aria-expanded', 'false');
+    });
+  }
+  function togglePopover(btn) {
+    const popId = btn.getAttribute('aria-controls');
+    const pop = $(popId);
+    if (!pop) return;
+    const isOpen = !pop.hidden;
+    closeAllPopovers();
+    if (!isOpen) {
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+  document.querySelectorAll('.gear-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      togglePopover(btn);
+    });
+  });
+  document.querySelectorAll('[data-close-popover]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      closeAllPopovers();
+    });
+  });
+  // 點 popover 外側關閉 (不影響齒輪自身的 toggle)
+  document.addEventListener('mousedown', e => {
+    if (e.target.closest('.popover')) return;
+    if (e.target.closest('.gear-btn')) return;
+    closeAllPopovers();
+  });
+  // ESC 關閉 popover (dialog 自己會處理自己的 ESC)
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAllPopovers();
+  });
 
   $('themeGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
@@ -1494,6 +2040,17 @@
   $('tabNav').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
     switchTab(e.target.dataset.tab);
+  });
+
+  // B9 — 區間試算範圍切換
+  $('rangeGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    const h = parseInt(e.target.dataset.half, 10);
+    if (!RANGE_HALF_OPTIONS.includes(h)) return;
+    rangeRowsHalf = h;
+    syncToggleGroups();
+    try { localStorage.setItem(RANGE_KEY, String(h)); } catch (_) {}
+    renderRangeTable();
   });
 
   // ============================================================
@@ -1545,6 +2102,11 @@
   try {
     const savedTab = localStorage.getItem(TAB_KEY);
     if (savedTab === 'detail' || savedTab === 'range') activeTab = savedTab;
+  } catch (_) {}
+  // 還原 B9 區間範圍
+  try {
+    const savedHalf = parseInt(localStorage.getItem(RANGE_KEY), 10);
+    if (RANGE_HALF_OPTIONS.includes(savedHalf)) rangeRowsHalf = savedHalf;
   } catch (_) {}
   syncToggleGroups();
   updateDirectionUI();
