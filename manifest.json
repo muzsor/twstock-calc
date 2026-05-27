@@ -1,0 +1,21 @@
+{
+  "name": "台股交易計算機",
+  "short_name": "台股計算機",
+  "description": "試算手續費、證交稅、借券費與實際損益。純前端、零追蹤。",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "categories": ["finance", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
