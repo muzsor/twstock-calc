@@ -1,0 +1,1201 @@
+  /* ============================================================
+     Theme tokens — light is default, dark overrides via [data-theme="dark"]
+     台股紅漲綠跌色保留在兩個主題中
+     ============================================================ */
+  :root {
+    --bg-page: #f5f5f5;
+    --bg-card: #ffffff;
+    --bg-input: #fafafa;
+    --bg-highlight: #f0f0f0;
+    --bg-center-row: #fff3c4;  /* 區間試算中心列 — 暖金色系,呼應金色價格文字 */
+    --bg-big: #f5f5f5;
+    --bg-btn: #ffffff;
+    --bg-btn-hover: #f5f5f5;
+    --bg-btn-active: #111111;
+    --bg-btn-active-hover: #333333;
+    --bg-primary: #2563eb;          /* blue-600 — 主要動作按鈕 */
+    --bg-primary-hover: #1d4ed8;    /* blue-700 */
+    --bg-btn-secondary: #e8e8e8;
+    --bg-btn-secondary-hover: #d8d8d8;
+    --bg-snap-label: #f0f0f0;
+
+    --border: #d0d0d0;
+    --border-hover: #888888;
+    --border-soft: #e0e0e0;
+    --border-dashed: #e0e0e0;
+    --border-strong: #111111;
+
+    --text-strong: #111111;
+    --text: #333333;
+    --text-secondary: #555555;
+    --text-muted: #777777;
+    --text-faint: #888888;
+    --text-on-active: #ffffff;
+    --text-on-bigbg: #111111;
+
+    --focus-ring: rgba(0, 0, 0, 0.12);
+    --shadow-toast: 0 4px 14px rgba(0, 0, 0, 0.15);
+
+    --profit-bg: #d4302a;
+    --profit-text: #d4302a;
+    --loss-bg: #1f8f4f;
+    --loss-text: #1f8f4f;
+
+    --t-quick: 0.1s;
+    --t-fast: 0.15s;
+    --t-mid: 0.25s;
+  }
+
+  :root[data-theme="dark"] {
+    --bg-page: #000000;
+    --bg-card: #2e2e2e;
+    --bg-input: #1a1a1a;
+    --bg-highlight: #404040;
+    --bg-center-row: #3d3220;  /* 區間試算中心列 — 暖金色系,呼應金色價格文字 */
+    --bg-big: #000000;
+    --bg-btn: #1f1f1f;
+    --bg-btn-hover: #2a2a2a;
+    --bg-btn-active: #ffffff;
+    --bg-btn-active-hover: #d8d8d8;
+    --bg-primary: #3b82f6;          /* blue-500 — 深色模式略亮以維持對比 */
+    --bg-primary-hover: #2563eb;    /* blue-600 */
+    --bg-btn-secondary: #2a2a2a;
+    --bg-btn-secondary-hover: #3a3a3a;
+    --bg-snap-label: #1f1f1f;
+
+    --border: #4a4a4a;
+    --border-hover: #6a6a6a;
+    --border-soft: #444444;
+    --border-dashed: #444444;
+    --border-strong: #ffffff;
+
+    --text-strong: #ffffff;
+    --text: #d0d0d0;
+    --text-secondary: #c0c0c0;
+    --text-muted: #b8b8b8;
+    --text-faint: #888888;
+    --text-on-active: #111111;
+    --text-on-bigbg: #ffffff;
+
+    --focus-ring: rgba(255, 255, 255, 0.15);
+    --shadow-toast: 0 4px 14px rgba(0, 0, 0, 0.4);
+
+    --profit-text: #ff5050;
+    --loss-text: #4caf6a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select { font-family: inherit; }
+  /* 隱藏 number input 原生 spinner (全域;改用滾輪、stepper、套用按鈕) */
+  input[type=number] { -moz-appearance: textfield; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  /* 數字欄位等寬對齊 (tabular figures) */
+  .range-table,
+  .snap-target input[type=number],
+  .result-row .value,
+  .version-tag,
+  .return-bar-scale,
+  .buy-entry-num,
+  .buy-list-summary strong,
+  .buy-list-count,
+  .mobile-result-bar-profit,
+  .mobile-result-bar-return {
+    font-variant-numeric: tabular-nums;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+    background: var(--bg-page);
+    min-height: 100vh;
+    padding: 20px;
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  header { text-align: center; color: var(--text-strong); margin-bottom: 16px; }
+  header h1 { font-size: 30px; margin-bottom: 6px; font-weight: 700; letter-spacing: 2px; }
+  header p { color: var(--text-faint); font-size: 15px; }
+
+  .action-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  /* 分隔線:主題群組與動作按鈕之間 */
+  .action-bar .divider {
+    width: 1px;
+    height: 22px;
+    background: var(--border);
+  }
+  /* 描邊按鈕共用外觀 (btn-action / btn-group / snap-action / buy-entry-remove) */
+  .btn-action,
+  .btn-group button,
+  .snap-action,
+  .buy-entry-remove {
+    border: 1px solid var(--border);
+    background: var(--bg-btn);
+    transition: all var(--t-fast);
+  }
+  /* 共用 hover (buy-entry-remove 例外,自有紅色危險樣式) */
+  .btn-action:hover,
+  .btn-group button:hover,
+  .snap-action:hover {
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+  }
+
+  .btn-action {
+    padding: 8px 18px;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .btn-action.primary {
+    background: var(--bg-primary);
+    color: #ffffff;
+    border-color: var(--bg-primary);
+  }
+  .btn-action.primary:hover { background: var(--bg-primary-hover); border-color: var(--bg-primary-hover); }
+
+  /* 主題切換 — iOS 風格 segmented pill
+     active 用「浮起的卡片」表達,而不是反相填色,
+     避免「淺色按鈕變黑」「深色按鈕變白」的視覺矛盾 */
+  .theme-toggle {
+    display: inline-flex;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .theme-toggle button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 11px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: background var(--t-fast), color var(--t-fast);
+    white-space: nowrap;
+  }
+  .theme-toggle button:hover:not(.active) {
+    color: var(--text-strong);
+    background: var(--bg-btn-hover);
+  }
+  .theme-toggle button.active {
+    background: var(--bg-card);
+    color: var(--text-strong);
+    font-weight: 600;
+    box-shadow: 0 1px 2px var(--focus-ring);
+  }
+  /* 主題標示小圓點 (在按鈕文字前) */
+  .theme-toggle button::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-shrink: 0;
+  }
+  .theme-toggle button[data-theme="light"]::before {
+    background: #ffffff;
+    border-color: #d0d0d0;
+  }
+  .theme-toggle button[data-theme="dark"]::before {
+    background: #111111;
+    border-color: #444444;
+  }
+  .theme-toggle button[data-theme="auto"]::before {
+    background: linear-gradient(135deg, #ffffff 0%, #ffffff 50%, #111111 50%, #111111 100%);
+    border-color: var(--border);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  /* 結果卡內的分頁 — 取代 h2 當作 card title,主動底線色與內容銜接 */
+  .card-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .card-tabs button {
+    padding: 6px 16px 11px;
+    margin-bottom: -2px;     /* 與 .card-tabs 的 border 重疊,讓 active 下緣銜接內容 */
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: color var(--t-fast), border-color var(--t-fast);
+    white-space: nowrap;
+  }
+  .card-tabs button:hover:not(.active) {
+    color: var(--text-strong);
+  }
+  .card-tabs button.active {
+    color: var(--text-strong);
+    font-weight: 700;
+    border-bottom-color: var(--bg-primary);
+  }
+  .tab-content[hidden] { display: none; }
+
+  /* 區間試算表格 */
+  .range-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+  }
+  .range-table th, .range-table td {
+    padding: 11px 14px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 15px;
+  }
+  .range-table th {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .range-table th:first-child,
+  .range-table td:first-child {
+    text-align: left;
+  }
+  .range-table tbody tr.center {
+    background: var(--bg-center-row);
+  }
+  .range-table tbody tr.center td:first-child {
+    color: #b8862e;  /* 比金色文字更飽和一點,確保淺色金色背景下仍清楚 */
+    font-weight: 700;
+    font-size: 16px;
+  }
+  :root[data-theme="dark"] .range-table tbody tr.center td:first-child {
+    color: #f5c451;  /* 深色金色背景下,亮金色文字較清楚 */
+  }
+  .range-table td.profit-cell { font-weight: 600; }
+  .range-table td.profit-cell.gain { color: var(--profit-text); }
+  .range-table td.profit-cell.lose { color: var(--loss-text); }
+  .range-table tbody tr td.empty {
+    text-align: center;
+    color: var(--text-faint);
+    padding: 28px 14px;
+    font-size: 14px;
+  }
+
+
+  .card {
+    background: var(--bg-card);
+    border-radius: 4px;
+    padding: 22px;
+    border: 1px solid var(--border-soft);
+  }
+  .card h2 {
+    font-size: 18px;
+    margin-bottom: 18px;
+    color: var(--text-strong);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .field input, .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 17px;
+    background: var(--bg-input);
+    transition: all var(--t-fast);
+    color: var(--text-strong);
+  }
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+
+  /* 快捷對齊 — 兩個視覺對等的卡片(左:單純按鈕;右:合一的輸入組) */
+  .snap-bar {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .snap-action {
+    flex: 1 1 140px;
+    min-height: 40px;
+    padding: 0 14px;
+    color: var(--text-secondary);
+    border-radius: 2px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .snap-action:hover { background: var(--bg-btn-hover); }
+  .snap-action:active { background: var(--bg-input); }
+
+  /* 複合控制元件 wrapper (snap-target、number-stepper) 共用樣式 */
+  .snap-target,
+  .number-stepper {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  }
+  .snap-target:hover,
+  .number-stepper:hover { border-color: var(--border-hover); }
+  .snap-target:focus-within,
+  .number-stepper:focus-within {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .snap-target {
+    flex: 1 1 220px;
+    min-height: 40px;
+    overflow: hidden;
+    background: var(--bg-btn);
+  }
+  .snap-target .snap-label {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-snap-label);
+    white-space: nowrap;
+  }
+  .snap-target input[type=number] {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    border: none;
+    background: var(--bg-input);
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-strong);
+    padding: 0 4px;
+  }
+  .snap-target input[type=number]:focus { outline: none; box-shadow: none; }
+  /* 隱藏 number input 原生 spinner (全域;有滾輪 + stepper / 套用按鈕替代) */
+  .snap-target .snap-pct {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 13px;
+    color: var(--text-faint);
+    background: var(--bg-input);
+  }
+  .snap-target button {
+    padding: 0 18px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: var(--bg-btn-secondary);
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 500;
+    transition: background var(--t-fast);
+    white-space: nowrap;
+  }
+  .snap-target button:hover { background: var(--bg-btn-secondary-hover); }
+  .snap-target button:active { background: var(--bg-btn); }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    font-size: 15px;
+  }
+  .result-row .label { color: var(--text-muted); }
+  .result-row .value {
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .result-row.sub {
+    padding: 4px 0 8px;
+    font-size: 13px;
+  }
+  .result-row.sub .label { color: var(--text-faint); padding-left: 14px; }
+  .result-row.sub .value { color: var(--text-secondary); font-weight: 500; }
+
+  .result-section {
+    border-bottom: 1px dashed var(--border-dashed);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .result-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .result-row.highlight {
+    background: var(--bg-highlight);
+    margin: 6px -10px;
+    padding: 10px;
+    border-radius: 2px;
+    border-left: 3px solid var(--border-strong);
+  }
+  .result-row.big {
+    padding: 14px 10px;
+    margin: 8px -10px 4px;
+    background: var(--bg-big);
+    border-radius: 2px;
+    font-size: 16px;
+  }
+  .result-row.big .label { font-weight: 600; color: var(--text-on-bigbg); }
+  .result-row.big .value { font-size: 24px; font-weight: 700; color: var(--text-on-bigbg); }
+  .result-row.profit .value { color: var(--profit-text); }
+  .result-row.loss .value { color: var(--loss-text); }
+  .result-row.big.profit { background: var(--profit-bg); }
+  .result-row.big.loss { background: var(--loss-bg); }
+  .result-row.big.profit .label,
+  .result-row.big.loss .label,
+  .result-row.big.profit .value,
+  .result-row.big.loss .value { color: #fff; }
+
+  .help {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 4px;
+    line-height: 1.6;
+  }
+  .btn-group {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .btn-group button {
+    flex: 1;
+    min-width: 60px;
+    padding: 8px 8px;
+    border-radius: 2px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .btn-group button.active {
+    background: var(--bg-btn-active);
+    color: var(--text-on-active);
+    border-color: var(--bg-btn-active);
+  }
+  .footer-note {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-top: 18px;
+    line-height: 1.8;
+  }
+  .version-tag {
+    display: block;
+    margin-top: 10px;
+    font-size: 10px;
+    opacity: 0.55;
+  }
+
+  .toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: var(--loss-bg);
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-mid), transform var(--t-mid);
+    z-index: 1000;
+    box-shadow: var(--shadow-toast);
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast.err { background: var(--profit-bg); }
+
+  /* B9 — 區間試算範圍切換 (inline 小型 btn-group) */
+  .range-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .range-controls-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .btn-group-inline {
+    margin-top: 0;
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+  .btn-group-inline button {
+    flex: 0 0 auto;
+    min-width: 56px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  /* B10 — 報酬率視覺進度條 (中心 0%, 視覺範圍 ±10%) */
+  .return-bar {
+    margin: -2px 10px 12px;
+    padding: 0;
+  }
+  .return-bar-track {
+    position: relative;
+    height: 8px;
+    background: var(--bg-highlight);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .return-bar-zero {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    margin-left: -0.5px;
+    background: var(--border-strong);
+    opacity: 0.5;
+    z-index: 1;
+  }
+  .return-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--profit-bg);
+    transition: left var(--t-mid) ease, right var(--t-mid) ease, background var(--t-mid);
+  }
+  .return-bar-fill.loss { background: var(--loss-bg); }
+  .return-bar-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 4px;
+  }
+  .return-bar.overflow .return-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.35) 0,
+      rgba(255,255,255,0.35) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+  }
+  .return-bar.overflow-pos .return-bar-fill::after { right: 0; }
+  .return-bar.overflow-neg .return-bar-fill::after { left: 0; }
+
+  /* B12 — 輸入驗證錯誤/警示樣式 */
+  :root {
+    --err-color: #d4302a;
+    --err-shadow: rgba(212, 48, 42, 0.15);
+    --warn-color: #d97706;
+    --warn-shadow: rgba(217, 119, 6, 0.15);
+  }
+  :root[data-theme="dark"] {
+    --err-color: #ff5050;
+    --err-shadow: rgba(255, 80, 80, 0.2);
+    --warn-color: #fbbf24;
+    --warn-shadow: rgba(251, 191, 36, 0.2);
+  }
+  .field.has-error > input,
+  .field.has-error > select {
+    border-color: var(--err-color);
+    box-shadow: 0 0 0 2px var(--err-shadow);
+  }
+  .field.has-warn > input,
+  .field.has-warn > select {
+    border-color: var(--warn-color);
+    box-shadow: 0 0 0 2px var(--warn-shadow);
+  }
+  .field.has-error .snap-target,
+  .field.has-error .number-stepper {
+    border-color: var(--err-color);
+    box-shadow: 0 0 0 2px var(--err-shadow);
+  }
+  .field.has-warn .snap-target,
+  .field.has-warn .number-stepper {
+    border-color: var(--warn-color);
+    box-shadow: 0 0 0 2px var(--warn-shadow);
+  }
+  .field-error {
+    font-size: 12px;
+    margin-top: 4px;
+    line-height: 1.5;
+    display: none;
+  }
+  .field.has-error .field-error {
+    display: block;
+    color: var(--err-color);
+  }
+  .field.has-warn .field-error {
+    display: block;
+    color: var(--warn-color);
+  }
+
+  /* B6 — 步進按鈕 (input 右側兩顆,觸控目標 ≥44px) */
+  .number-stepper {
+    width: 100%;
+    background: var(--bg-input);
+  }
+  .number-stepper input[type=number] {
+    flex: 1;
+    min-width: 0;
+    width: 0;          /* 從 0 起算讓 flex 撐大;auto 會用 input.size 內在寬度撐爆父層 min-content */
+    border: none;
+    background: transparent;
+    border-radius: 0;
+    padding: 10px 12px;
+  }
+  .number-stepper input[type=number]:focus {
+    outline: none;
+    box-shadow: none;
+    border-color: transparent;
+  }
+  .stepper-btn {
+    flex: 0 0 44px;
+    min-height: 44px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: var(--bg-btn);
+    color: var(--text-secondary);
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: background var(--t-quick), color var(--t-quick);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .stepper-btn:hover {
+    background: var(--bg-btn-hover);
+    color: var(--text-strong);
+  }
+  .stepper-btn:active,
+  .stepper-btn.holding {
+    background: var(--bg-highlight);
+    color: var(--text-strong);
+  }
+  .stepper-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--focus-ring);
+  }
+  .stepper-btn[data-step="dec"]::before { content: '−'; }
+  .stepper-btn[data-step="inc"]::before { content: '+'; }
+
+  /* B6 — 區間試算表 wrap,防止窄螢幕擠爆 */
+  .range-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 12px;
+  }
+  .range-table-wrap .range-table { margin-top: 0; }
+
+  /* A1 — 多筆加碼買進列表 */
+  #buyList { display: flex; flex-direction: column; gap: 10px; }
+  .buy-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .buy-entry-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .buy-entry-num {
+    width: 22px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  /* 緊湊型 stepper — price 視覺權重比 qty 大 (寬度 + 字體 + padding 對比) */
+  .buy-entry .number-stepper {
+    flex: 1 1 130px;
+    min-width: 110px;
+  }
+  .buy-entry .number-stepper input[type=number] {
+    padding: 8px 10px;
+    font-size: 15px;
+  }
+  .buy-entry .stepper-btn {
+    flex: 0 0 38px;
+    min-height: 38px;
+    font-size: 16px;
+  }
+  /* desktop: price 比 qty 寬 (1.5:1);mobile grid 會 override */
+  .buy-entry .number-stepper:has(.buy-entry-price) {
+    flex: 1.5 1 150px;
+  }
+  .buy-entry .number-stepper:has(.buy-entry-qty) {
+    flex: 1 1 110px;
+    min-width: 110px;
+  }
+  /* 第 2 筆以後 ×刪除按鈕擠占空間,單獨把 qty basis 與 min 拉高 */
+  #buyList .buy-entry:nth-child(n+2) .number-stepper:has(.buy-entry-qty) {
+    flex-basis: 140px;
+    min-width: 140px;
+  }
+  /* price 加大 (字大、欄高) */
+  .buy-entry .buy-entry-price {
+    font-size: 18px;
+    font-weight: 600;
+    padding: 11px 12px;
+  }
+  /* qty 縮小 (字小、欄矮);stretch 會讓同列 stepper-btn 跟著縮 */
+  .buy-entry .buy-entry-qty {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+  .buy-entry-times {
+    font-size: 13px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .buy-entry-unit {
+    font-size: 12px;
+    color: var(--text-faint);
+    min-width: 18px;
+    flex-shrink: 0;
+  }
+  .buy-entry-remove {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: var(--text-muted);
+    border-radius: 4px;
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .buy-entry-remove:hover {
+    color: var(--err-color);
+    border-color: var(--err-color);
+  }
+  .buy-entry-tick {
+    margin-left: 28px;
+    font-size: 11px;
+    color: var(--text-faint);
+    line-height: 1.4;
+  }
+  .buy-entry-tick.invalid { color: var(--err-color); }
+
+  /* + 加碼買進 — dashed placeholder 風格 */
+  .add-entry-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+    border: 1.5px dashed var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all var(--t-fast);
+  }
+  .add-entry-btn:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    border-style: dashed;
+    color: var(--text-strong);
+    background: var(--bg-btn-hover);
+  }
+  .add-entry-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* class display: block 會蓋掉 UA [hidden] 樣式,需顯式還原 */
+  .add-entry-btn[hidden] { display: none; }
+
+  /* 平均成本 summary (≥2 筆才顯示) */
+  .buy-list-summary {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-faint);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    line-height: 1.6;
+  }
+  .buy-list-summary[hidden] { display: none; }
+  .buy-list-summary strong {
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+  .buy-list-count {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+
+  @media (max-width: 760px) {
+    /* 行動下用 grid:左欄①、中欄 price/qty、右欄 ×/張;每筆 layout 一致 */
+    .buy-entry-line {
+      display: grid;
+      grid-template-columns: 22px 1fr 38px;
+      grid-template-rows: auto auto;
+      column-gap: 6px;
+      row-gap: 6px;
+      align-items: center;
+    }
+    .buy-entry-num {
+      grid-column: 1;
+      grid-row: 1;
+      width: auto;
+    }
+    .buy-entry .number-stepper:has(.buy-entry-price) {
+      grid-column: 2;
+      grid-row: 1;
+      flex-basis: auto;
+      min-width: 0;
+    }
+    .buy-entry .number-stepper:has(.buy-entry-qty) {
+      grid-column: 2;
+      grid-row: 2;
+      flex-basis: auto;
+      min-width: 0;
+    }
+    .buy-entry-remove {
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: center;
+      width: 34px;
+      height: 34px;
+      font-size: 18px;
+    }
+    .buy-entry-unit {
+      grid-column: 3;
+      grid-row: 2;
+      justify-self: center;
+      min-width: 0;
+    }
+    .buy-entry-times { display: none; }
+    .buy-entry-tick { margin-left: 28px; }
+  }
+
+  /* 齒輪按鈕 (進階設定觸發) */
+  /* 圖示按鈕共用外觀 (gear-btn / popover-close) */
+  .gear-btn,
+  .popover-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border-radius: 4px;
+  }
+  /* 共用 hover/開啟 highlight */
+  .gear-btn:hover,
+  .gear-btn[aria-expanded="true"],
+  .popover-close:hover {
+    background: var(--bg-btn-hover);
+    color: var(--text-strong);
+  }
+
+  .gear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  }
+  .gear-btn:hover,
+  .gear-btn[aria-expanded="true"] { border-color: var(--border); }
+  .gear-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+  .gear-btn svg { width: 18px; height: 18px; display: block; }
+
+  /* Popover (浮動設定面板) — 非 modal,點外面或 ESC 關閉 */
+  .popover-host {
+    position: relative;
+    display: inline-block;
+  }
+  .popover-host[hidden] { display: none; }
+  .popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 100;
+    width: min(420px, calc(100vw - 24px));
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  }
+  :root[data-theme="dark"] .popover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
+  .popover[hidden] { display: none; }
+  .popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .popover-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .popover-close {
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--text-muted);
+  }
+  .popover-body { padding: 20px; }
+  .popover-body > *:last-child { margin-bottom: 0; }
+
+  /* Popover 內加大輸入/按鈕 — 電腦與手機都好操作 (≥40px 觸控目標) */
+  .popover-body .field { margin-bottom: 18px; }
+  .popover-body .field label {
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+  .popover-body .field input,
+  .popover-body .field select {
+    padding: 12px 14px;
+    font-size: 18px;
+  }
+  .popover-body .btn-group { gap: 8px; }
+  .popover-body .btn-group button {
+    padding: 11px 8px;
+    font-size: 14px;
+  }
+  .popover-body .btn-group-inline { gap: 8px; }
+  .popover-body .btn-group-inline button {
+    min-width: 78px;
+    padding: 12px 22px;
+    font-size: 15px;
+  }
+  .popover-body .range-controls {
+    gap: 14px;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+  }
+  .popover-body .range-controls-label {
+    font-size: 15px;
+  }
+  .popover-body .help {
+    font-size: 13px;
+  }
+
+  /* Card header row — 包覆 tabs + 區間齒輪,讓齒輪與 tab 同列(不再另佔一行) */
+  .card-header-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid var(--border-strong);
+  }
+  .card-header-row .card-tabs {
+    border-bottom: none;
+    margin-bottom: 0;
+    flex: 1;
+  }
+  .card-header-row .popover-host {
+    margin-bottom: 6px;
+  }
+
+  /* Confirm dialog (重置警告) */
+  dialog.confirm-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;  /* 配合 inset:0 達成置中,覆蓋全域 * { margin: 0 } reset */
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0;
+    background: var(--bg-card);
+    color: var(--text);
+    max-width: 380px;
+    min-width: 280px;
+    width: min(380px, calc(100vw - 32px));
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+    font-family: inherit;
+  }
+  dialog.confirm-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  :root[data-theme="dark"] dialog.confirm-dialog {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  }
+  :root[data-theme="dark"] dialog.confirm-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .confirm-dialog-body { padding: 20px 22px; }
+  .confirm-dialog-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-strong);
+    margin-bottom: 8px;
+  }
+  .confirm-dialog-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .confirm-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  /* Mobile sticky 結果列 — 桌面隱藏,行動才顯示 */
+  .mobile-result-bar { display: none; }
+
+  @media (max-width: 760px) {
+    body {
+      padding: 12px;
+      padding-bottom: calc(82px + env(safe-area-inset-bottom));  /* 預留底部 bar 空間 */
+    }
+    .layout { grid-template-columns: 1fr; gap: 14px; }
+    .row { grid-template-columns: 1fr; }
+    header h1 { font-size: 24px; }
+    .card { padding: 18px; }
+    .result-row.big .value { font-size: 21px; }
+    /* B6 — 行動裝置觸控目標加大 */
+    .btn-group button {
+      min-height: 44px;
+      padding: 11px 10px;
+      font-size: 14px;
+    }
+    .snap-action { min-height: 44px; }
+    .snap-target { min-height: 44px; }
+
+    /* 底部 sticky 結果列 */
+    .mobile-result-bar {
+      display: block;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 200;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+      padding-bottom: env(safe-area-inset-bottom);
+      transition: opacity var(--t-mid) ease, transform var(--t-mid) ease;
+    }
+    .mobile-result-bar.hidden-by-scroll {
+      opacity: 0;
+      transform: translateY(100%);
+      pointer-events: none;
+    }
+    :root[data-theme="dark"] .mobile-result-bar {
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
+    }
+    .mobile-result-bar-tap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 68px;
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      text-align: left;
+      touch-action: manipulation;
+    }
+    .mobile-result-bar-tap:active { background: var(--bg-highlight); }
+    .mobile-result-bar-profit {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--text-strong);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .mobile-result-bar.profit .mobile-result-bar-profit { color: var(--profit-text); }
+    .mobile-result-bar.loss   .mobile-result-bar-profit { color: var(--loss-text); }
+    .mobile-result-bar-return {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .mobile-result-bar.profit .mobile-result-bar-return { color: var(--profit-text); }
+    .mobile-result-bar.loss   .mobile-result-bar-return { color: var(--loss-text); }
+    .mobile-result-bar-track {
+      position: relative;
+      flex: 1;
+      min-width: 40px;
+      height: 8px;
+      background: var(--bg-highlight);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .mobile-result-bar-zero {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      margin-left: -0.5px;
+      background: var(--border-strong);
+      opacity: 0.4;
+    }
+    .mobile-result-bar-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: var(--profit-bg);
+      transition: left var(--t-mid), right var(--t-mid), background var(--t-mid);
+    }
+    .mobile-result-bar-fill.loss { background: var(--loss-bg); }
+    .mobile-result-bar-cta {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      white-space: nowrap;
+      padding-left: 4px;
+    }
+  }

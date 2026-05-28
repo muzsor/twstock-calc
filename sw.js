@@ -16,6 +16,7 @@ const CACHE = `twstock-calc-${VERSION}`;
 const ASSETS = [
   './',
   './index.html',
+  './styles.css',
   './tests.html',
   './manifest.json',
   './icons/icon.svg',
