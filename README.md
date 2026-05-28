@@ -1,6 +1,6 @@
 # 台股交易計算機
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-ready-success.svg)](#開發)
 
@@ -22,6 +22,7 @@
 ### 交易條件(共用輸入)
 
 - ✅ 支援 **做多** 與 **做空(融券)** 兩種方向
+- ✅ **多筆加碼買進**(做多)或 **多筆回補**(做空):1~10 筆,每筆獨立 price/qty、共用全域設定;自動計算加權平均成本
 - ✅ 商品類型按鈕組:**一般 (0.3%) / ETF (0.1%) / 當沖 (0.15%) / 免稅**
 - ✅ 自訂手續費折扣(快捷:原價/6/5/3.8/2.8 折)與最低手續費(預設 20 元)
 - ✅ 融券借券費按 **年化費率 × 持有天數 / 365** 計算
@@ -106,11 +107,11 @@ python -m http.server 8765
 # 然後開 http://localhost:8765/
 ```
 
-或直接以 `file://` 協議開啟 `index.html`(`navigator.clipboard` 在 file:// 下會 fallback 到 `execCommand`,Service Worker 在 file:// 下會自動跳過)。
+或直接以 `file://` 協議開啟 `index.html`(`navigator.clipboard` 在 file:// 下會 fallback 到 `execCommand`，Service Worker 在 file:// 下會自動跳過)。
 
 ### PWA(可加到主畫面)
 
-線上版(HTTPS)或本機 http server 下,瀏覽器會自動註冊 Service Worker:
+線上版(HTTPS)或本機 http server 下，瀏覽器會自動註冊 Service Worker:
 
 - **Android Chrome**:網址列出現「安裝」icon → 加到桌面變獨立 app
 - **iOS Safari**:「分享 → 加到主畫面」
@@ -118,15 +119,15 @@ python -m http.server 8765
 
 ### 版本管理
 
-- 版本號採 [Semantic Versioning](https://semver.org/lang/zh-TW/),變更記錄於 [CHANGELOG.md](CHANGELOG.md)
-- 改版只需更新 `index.html` 的 `const APP_VERSION`,SW 會自動換新 cache
+- 版本號採 [Semantic Versioning](https://semver.org/lang/zh-TW/)，變更記錄於 [CHANGELOG.md](CHANGELOG.md)
+- 改版只需更新 `index.html` 的 `const APP_VERSION`，SW 會自動換新 cache
 - footer 右下顯示當前版本號
 
 ### 單元測試
 
-開啟 [tests.html](tests.html) 即可看到 101 個單元測試的執行結果。
+開啟 [tests.html](tests.html) 即可看到 133 個單元測試的執行結果。
 
-測試透過 `<iframe>` 載入 `index.html`，讀取 `window.__calc` 暴露的純函數來驗證計算邏輯(`fmtMoney` / `calcFee` / `calcSide` / `calcBreakeven` / `calcTargetPrice` / `snapPriceToTick` / `getTickSize` / `calcScenarioProfit`)。
+測試透過 `<iframe>` 載入 `index.html`，讀取 `window.__calc` 暴露的純函數來驗證計算邏輯(`fmtMoney` / `calcFee` / `calcSide` / `calcMultiBuy` / `calcBreakeven` / `calcTargetPrice` / `snapPriceToTick` / `getTickSize` / `calcScenarioProfit`)。
 
 UI 互動(reset/copy/snap 按鈕、localStorage 持久化、滾輪、direction 切換、Tab 切換、商品類型按鈕)需手動驗證。
 
@@ -137,7 +138,7 @@ UI 互動(reset/copy/snap 按鈕、localStorage 持久化、滾輪、direction �
 - 🚫 沒有任何 fetch / XHR / WebSocket — 計算結果不離開瀏覽器
 - 🚫 沒有 analytics、tracking、cookies
 - 🚫 沒有第三方 CDN 依賴(連 favicon 都是 inline SVG)
-- 🚫 Service Worker 只快取本地資源(`index.html` / `tests.html` / `manifest.json` / `icons/icon.svg`),**跨域請求一律跳過、不代理**
+- 🚫 Service Worker 只快取本地資源(`index.html` / `tests.html` / `manifest.json` / `icons/icon.svg`)，**跨域請求一律跳過、不代理**
 - ✅ localStorage 是 per-origin，使用者輸入只存在自己的瀏覽器
 
 ## 免責聲明
