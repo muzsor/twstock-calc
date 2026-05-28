@@ -59,7 +59,7 @@
 </head>
 <body>
 <h1>Calculator 單元測試</h1>
-<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit)</div>
+<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy)</div>
 <div id="summary" class="summary loading">載入中…</div>
 <table>
   <thead>
@@ -131,6 +131,7 @@
   function runTests(C) {
     const { fmtNum, fmtMoney, round2, getTickSize, formatDiscount, calcFee, calcSide,
             calcBreakeven, calcTargetPrice, snapPriceToTick, calcScenarioProfit,
+            calcMultiBuy,
             FEE_RATE, TAX_RATES } = C;
 
     // ============================================================
@@ -420,6 +421,78 @@
       const be = calcBreakeven({ netSell: 99558, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, dir: 'short' });
       const r = calcScenarioProfit({ buyPrice: round2(be), sellPrice: 100, shares: 1000, discount: 1, minFee: 20, taxRate: 0.003, borrowEffRate: 0.0008/365, dir: 'short' });
       assert('short be 回補價 → |profit| ≤ 10', Math.abs(r.profit) <= 10, true);
+    }
+
+    // ============================================================
+    group('calcMultiBuy — A1 多筆加碼買進聚合');
+    // ============================================================
+    {
+      // 1) 單筆等同 calcSide
+      const r1 = calcMultiBuy([{ price: 100, qty: 1 }], 1000, 1, 20, 0.003);
+      assert('1 筆 100×1 張: totalAmount = 100,000', r1.totalAmount, 100000);
+      assert('1 筆 100×1 張: totalFee = 142', r1.totalFee, 142);
+      assert('1 筆 100×1 張: totalCost = 100,142', r1.totalCost, 100142);
+      assert('1 筆 100×1 張: totalShares = 1,000', r1.totalShares, 1000);
+      assert('1 筆 100×1 張: avgCost = 100.14', r1.avgCost, 100.14);
+    }
+    {
+      // 2) 雙筆加碼:每筆獨立適用最低手續費
+      const r2 = calcMultiBuy([{ price: 100, qty: 1 }, { price: 95, qty: 1 }], 1000, 1, 20, 0.003);
+      assert('2 筆: totalAmount = 195,000', r2.totalAmount, 195000);
+      assert('2 筆: totalFee = 142 + 135 = 277', r2.totalFee, 277);
+      assert('2 筆: totalCost = 195,277', r2.totalCost, 195277);
+      assert('2 筆: totalShares = 2,000', r2.totalShares, 2000);
+      assert('2 筆: avgCost = 97.64', r2.avgCost, 97.64);
+    }
+    {
+      // 3) 最低手續費門檻:小額交易,每筆獨立適用 minFee
+      const r3 = calcMultiBuy([{ price: 5, qty: 1 }, { price: 5, qty: 1 }], 1000, 1, 20, 0.003);
+      // 5000 × 0.001425 = 7.125 → 7 < 20 → minFee=20 適用,每筆 20
+      assert('小額 2 筆: totalFee = 20 + 20 = 40', r3.totalFee, 40);
+      assert('小額 2 筆: totalCost = 10,040', r3.totalCost, 10040);
+    }
+    {
+      // 4) 折扣套用 + 零股
+      const r4 = calcMultiBuy([{ price: 100, qty: 100 }, { price: 110, qty: 200 }], 1, 0.5, 20, 0.003);
+      // entry 1: 100×100 = 10,000 × 0.001425 × 0.5 = 7.125 → 7 < 20 → minFee 20
+      // entry 2: 110×200 = 22,000 × 0.001425 × 0.5 = 15.675 → 15 < 20 → minFee 20
+      assert('零股 2 筆 5折: totalFee = 40', r4.totalFee, 40);
+      assert('零股 2 筆: totalShares = 300', r4.totalShares, 300);
+      assert('零股 2 筆: totalAmount = 32,000', r4.totalAmount, 32000);
+    }
+    {
+      // 5) 無效 entry (price≤0 或 qty≤0) 自動跳過
+      const r5 = calcMultiBuy(
+        [{ price: 100, qty: 1 }, { price: 0, qty: 1 }, { price: 100, qty: 0 }, { price: 95, qty: 1 }],
+        1000, 1, 20, 0.003,
+      );
+      assert('跳過無效 entry: totalShares = 2,000', r5.totalShares, 2000);
+      assert('跳過無效 entry: totalAmount = 195,000', r5.totalAmount, 195000);
+    }
+    {
+      // 6) 空陣列 → 全 0
+      const r6 = calcMultiBuy([], 1000, 1, 20, 0.003);
+      assert('空陣列: totalCost = 0', r6.totalCost, 0);
+      assert('空陣列: totalShares = 0', r6.totalShares, 0);
+      assert('空陣列: avgCost = 0', r6.avgCost, 0);
+    }
+    {
+      // 7) 加權平均成本驗算 — 不同價量
+      // entry 1: 100×1000 股 = 100,000 + 142 = 100,142
+      // entry 2: 200×500 股 = 100,000 + 142 = 100,142
+      // total cost = 200,284, total shares = 1,500
+      // avgCost = 200,284 / 1,500 = 133.5226... → round to 133.52
+      const r7 = calcMultiBuy([{ price: 100, qty: 1 }, { price: 200, qty: 0.5 }], 1000, 1, 20, 0.003);
+      assert('加權平均: totalShares = 1,500', r7.totalShares, 1500);
+      assert('加權平均: avgCost = 133.52', r7.avgCost, 133.52);
+    }
+    {
+      // 8) 10 筆 (上限) 仍能正確計算
+      const tenEntries = Array.from({ length: 10 }, (_, i) => ({ price: 100 + i, qty: 1 }));
+      const r8 = calcMultiBuy(tenEntries, 1000, 1, 20, 0.003);
+      // sum prices 100+101+...+109 = 1045, each × 1000 = sum amount = 1,045,000
+      assert('10 筆: totalShares = 10,000', r8.totalShares, 10000);
+      assert('10 筆: totalAmount = 1,045,000', r8.totalAmount, 1045000);
     }
 
     // ============================================================
