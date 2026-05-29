@@ -118,12 +118,19 @@
   header h1 { font-size: 30px; margin-bottom: 6px; font-weight: 700; letter-spacing: 2px; }
   header p { color: var(--text-faint); font-size: 15px; }
 
+  /* D1 — mode 在左、工具列在右,兩端對齊;mobile 自動 wrap */
   .action-bar {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     gap: 14px;
     margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .action-bar-tools {
+    display: flex;
+    align-items: center;
+    gap: 14px;
     flex-wrap: wrap;
   }
   /* 分隔線:主題群組與動作按鈕之間 */
@@ -150,11 +157,15 @@
   }
 
   .btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 8px 18px;
     color: var(--text-secondary);
     border-radius: 4px;
     font-size: 13px;
   }
+  .btn-action svg { flex-shrink: 0; }
   .btn-action.primary {
     background: var(--bg-primary);
     color: #ffffff;
@@ -162,61 +173,76 @@
   }
   .btn-action.primary:hover { background: var(--bg-primary-hover); border-color: var(--bg-primary-hover); }
 
-  /* 主題切換 — iOS 風格 segmented pill
-     active 用「浮起的卡片」表達,而不是反相填色,
-     避免「淺色按鈕變黑」「深色按鈕變白」的視覺矛盾 */
-  .theme-toggle {
+  /* 主題切換 — 單一循環圖示按鈕 (auto → light → dark → auto)
+     圖示由 [data-current-theme] 屬性切換,JS 由 syncThemeButton() 維護 */
+  .theme-cycle-btn {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 3px;
-    gap: 2px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
   }
-  .theme-toggle button {
+  .theme-cycle-btn:hover {
+    background: var(--bg-btn-hover);
+    color: var(--text-strong);
+    border-color: var(--border-strong);
+  }
+  .theme-cycle-btn svg { width: 16px; height: 16px; }
+  .theme-cycle-btn .theme-icon { display: none; }
+  .theme-cycle-btn[data-current-theme="auto"]  .theme-icon[data-icon="auto"],
+  .theme-cycle-btn[data-current-theme="light"] .theme-icon[data-icon="light"],
+  .theme-cycle-btn[data-current-theme="dark"]  .theme-icon[data-icon="dark"] {
+    display: block;
+  }
+
+  /* D1 — 頂層模式切換 (iOS 風格 pill,當主要 nav) */
+  .mode-toggle {
     display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 11px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    gap: 3px;
+  }
+  .mode-toggle button {
+    position: relative;
+    padding: 9px 22px 11px;       /* 多 2px 底部空間給底線 indicator */
     background: transparent;
     color: var(--text-secondary);
     border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    transition: background var(--t-fast), color var(--t-fast);
+    border-radius: 5px;
+    font-size: 15px;
+    font-weight: 500;
+    transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
     white-space: nowrap;
   }
-  .theme-toggle button:hover:not(.active) {
+  .mode-toggle button:hover:not(.active) {
     color: var(--text-strong);
     background: var(--bg-btn-hover);
   }
-  .theme-toggle button.active {
+  .mode-toggle button.active {
     background: var(--bg-card);
-    color: var(--text-strong);
-    font-weight: 600;
-    box-shadow: 0 1px 2px var(--focus-ring);
+    color: var(--bg-primary);          /* 藍字 */
+    font-weight: 700;
+    box-shadow: 0 1px 3px var(--focus-ring);
   }
-  /* 主題標示小圓點 (在按鈕文字前) */
-  .theme-toggle button::before {
+  /* 藍色底線 indicator (內縮避開圓角,僅在 active 顯示) */
+  .mode-toggle button.active::after {
     content: '';
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    flex-shrink: 0;
-  }
-  .theme-toggle button[data-theme="light"]::before {
-    background: #ffffff;
-    border-color: #d0d0d0;
-  }
-  .theme-toggle button[data-theme="dark"]::before {
-    background: #111111;
-    border-color: #444444;
-  }
-  .theme-toggle button[data-theme="auto"]::before {
-    background: linear-gradient(135deg, #ffffff 0%, #ffffff 50%, #111111 50%, #111111 100%);
-    border-color: var(--border);
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 3px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--bg-primary);
   }
 
   .layout {
@@ -224,6 +250,15 @@
     grid-template-columns: 1fr 1fr;
     gap: 18px;
     align-items: start;
+  }
+  /* D1 — 依 data-app-mode 顯示對應 layout 與 footer 備註 (由 head 早期 script 設定,避免 FOUC) */
+  :root[data-app-mode="trade"] #layoutDividend,
+  :root[data-app-mode="trade"] #footerNoteDividend {
+    display: none;
+  }
+  :root[data-app-mode="dividend"] #layoutTrade,
+  :root[data-app-mode="dividend"] #footerNoteTrade {
+    display: none;
   }
   /* 結果卡內的分頁 — 取代 h2 當作 card title,主動底線色與內容銜接 */
   .card-tabs {
@@ -479,6 +514,69 @@
   .result-row.big.loss .label,
   .result-row.big.profit .value,
   .result-row.big.loss .value { color: #fff; }
+
+  /* D1 — 股利所得稅試算區塊 (兩方案比較 + 推薦標籤) */
+  .tax-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-bottom: 4px;
+  }
+  .tax-section-subtitle {
+    font-size: 13px;
+    color: var(--text-faint);
+    margin-bottom: 14px;
+    line-height: 1.7;
+  }
+  .tax-section-subtitle strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+  .tax-method {
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: var(--bg-input);
+    transition: border-color var(--t-mid), background var(--t-mid);
+  }
+  .tax-method:last-child { margin-bottom: 0; }
+  .tax-method.recommended {
+    border-color: var(--bg-primary);
+    background: var(--bg-card);
+  }
+  .tax-method-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .tax-method-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .tax-method-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 10px;
+    background: var(--bg-primary);
+    color: #ffffff;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+  .tax-method-rows .result-row {
+    padding: 3px 0;
+    font-size: 14px;
+  }
+  .tax-method-rows .result-row.sub {
+    padding-left: 0;
+    font-size: 13px;
+  }
+  .tax-method-rows .result-row.sub .label { padding-left: 0; }
+  .tax-method-rows .result-row .value { font-weight: 600; }
 
   .help {
     font-size: 12px;
@@ -1095,10 +1193,21 @@
       padding: 12px;
       padding-bottom: calc(82px + env(safe-area-inset-bottom));  /* 預留底部 bar 空間 */
     }
+    /* D1 — 除權息模式無底部 bar,不需預留 (用 :root[data-app-mode] 由 head script 早期設定) */
+    :root[data-app-mode="dividend"] body {
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
     .layout { grid-template-columns: 1fr; gap: 14px; }
     .row { grid-template-columns: 1fr; }
     header h1 { font-size: 24px; }
     .card { padding: 18px; }
+    /* D1 — mode-toggle 行動上縮小,確保兩按鈕能並列 */
+    .mode-toggle button { padding: 9px 14px; font-size: 14px; }
+    .tax-method { padding: 10px 12px; }
+    .tax-method-rows .result-row { font-size: 13px; }
+    /* D1 — 行動 wrap 時兩排都置中,而非 space-between 預設的左對齊 */
+    .action-bar { justify-content: center; }
+    .action-bar-tools { justify-content: center; }
     .result-row.big .value { font-size: 21px; }
     /* B6 — 行動裝置觸控目標加大 */
     .btn-group button {
@@ -1127,6 +1236,10 @@
       opacity: 0;
       transform: translateY(100%);
       pointer-events: none;
+    }
+    /* D1 — 除權息模式時行動底部 bar 不適用 (沒有損益/報酬率) */
+    .mobile-result-bar.hidden-by-mode {
+      display: none;
     }
     :root[data-theme="dark"] .mobile-result-bar {
       box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);

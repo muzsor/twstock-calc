@@ -59,7 +59,7 @@
 </head>
 <body>
 <h1>Calculator 單元測試</h1>
-<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy)</div>
+<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy / calcExDividendPrice / calcCashDividendIncome / calcStockDividendShares / calcFillDividendGain / calcDividendYield / calcProgressiveTax / calcDividendTax)</div>
 <div id="summary" class="summary loading">載入中…</div>
 <table>
   <thead>
@@ -132,6 +132,8 @@
     const { fmtNum, fmtMoney, round2, getTickSize, formatDiscount, calcFee, calcSide,
             calcBreakeven, calcTargetPrice, snapPriceToTick, calcScenarioProfit,
             calcMultiBuy,
+            calcExDividendPrice, calcCashDividendIncome, calcStockDividendShares,
+            calcFillDividendGain, calcDividendYield, calcProgressiveTax, calcDividendTax,
             FEE_RATE, TAX_RATES } = C;
 
     // ============================================================
@@ -539,6 +541,112 @@
       assert('profit = 9,430', profit, 9430);
       assert('return ≈ 9.43%', returnRate, 9.43, { approx: true, tol: 0.01 });
     }
+
+    // ============================================================
+    group('calcExDividendPrice — 除權息參考價');
+    // ============================================================
+    assert('純除息 100 配 2 → 98', calcExDividendPrice(100, 2, 0), 98);
+    assert('純除權 100 配 1 → 100/1.1', calcExDividendPrice(100, 0, 1), 100/1.1, { approx: true, tol: 1e-6 });
+    assert('現金 + 股票 50/2/1 → 48/1.1', calcExDividendPrice(50, 2, 1), 48/1.1, { approx: true, tol: 1e-6 });
+    assert('股價 0 → 0', calcExDividendPrice(0, 2, 0), 0);
+    assert('股利全 0 → 仍回 prePrice', calcExDividendPrice(100, 0, 0), 100);
+    assert('負股利視為 0 (clamp)', calcExDividendPrice(100, -1, 0), 100);
+
+    // ============================================================
+    group('calcCashDividendIncome — 現金股利 (含二代健保)');
+    // ============================================================
+    {
+      const r = calcCashDividendIncome(5000, 1.5, 0.0211, 20000);
+      assert('5000 × 1.5 → gross 7,500', r.gross, 7500);
+      assert('7,500 < 20,000 起徵點 → 不扣', r.healthIns, 0);
+      assert('實領 = 7,500', r.net, 7500);
+    }
+    {
+      const r = calcCashDividendIncome(10000, 2.5, 0.0211, 20000);
+      assert('10,000 × 2.5 → gross 25,000', r.gross, 25000);
+      assert('floor(25,000 × 2.11%) = 527', r.healthIns, 527);
+      assert('實領 = 24,473', r.net, 24473);
+    }
+    {
+      const r = calcCashDividendIncome(0, 5, 0.0211, 20000);
+      assert('0 股 → 0/0/0', r, { gross: 0, healthIns: 0, net: 0 });
+    }
+
+    // ============================================================
+    group('calcStockDividendShares — 股票股利配股');
+    // ============================================================
+    {
+      const r = calcStockDividendShares(10000, 1);
+      assert('10,000 配 1 元 → 1,000 股', r.allocated, 1000);
+      assert('總股數 11,000', r.totalShares, 11000);
+      assert('整股 11,000', r.wholeShares, 11000);
+      assert('畸零股 0', r.fractionalShares, 0);
+    }
+    {
+      const r = calcStockDividendShares(10005, 1.5);
+      assert('10,005 配 1.5 → allocated 1500.75', r.allocated, 1500.75, { approx: true, tol: 1e-6 });
+      assert('整股 11,505', r.wholeShares, 11505);
+      assert('畸零股 0.75', r.fractionalShares, 0.75, { approx: true, tol: 1e-6 });
+    }
+    assert('股票股利 0 → 持股不變', calcStockDividendShares(5000, 0).totalShares, 5000);
+
+    // ============================================================
+    group('calcFillDividendGain — 填權息漲幅');
+    // ============================================================
+    {
+      const r = calcFillDividendGain(100, 90);
+      assert('100/90 − 1 → 11.11%', r.gainPct, (100/90 - 1) * 100, { approx: true, tol: 1e-6 });
+      assert('目標價 = pre 100', r.targetPrice, 100);
+    }
+    assert('refPrice 0 → 漲幅 0', calcFillDividendGain(100, 0).gainPct, 0);
+    assert('prePrice 0 → 漲幅 0', calcFillDividendGain(0, 90).gainPct, 0);
+
+    // ============================================================
+    group('calcDividendYield — 殖利率');
+    // ============================================================
+    {
+      const r = calcDividendYield(3, 1, 60);
+      assert('現金殖利率 5%', r.cash, 5);
+      assert('股票殖利率 ≈ 1.667%', r.stock, 100/60, { approx: true, tol: 1e-6 });
+      assert('總殖利率 ≈ 6.667%', r.total, 5 + 100/60, { approx: true, tol: 1e-6 });
+    }
+    assert('股價 0 → 全 0', calcDividendYield(3, 1, 0).total, 0);
+
+    // ============================================================
+    group('calcProgressiveTax — 累進綜所稅 (台灣 2024 年度級距)');
+    // ============================================================
+    assert('0 → 0', calcProgressiveTax(0), 0);
+    assert('100k 全 5% → 5,000', calcProgressiveTax(100000), 5000);
+    assert('590k → 29,500 (5% 上限)', calcProgressiveTax(590000), 29500);
+    assert('600k 跨入 12% → 30,700', calcProgressiveTax(600000), 30700, { approx: true, tol: 0.5 });
+    assert('1.5M 跨入 20% → 152,300', calcProgressiveTax(1500000), 152300, { approx: true, tol: 0.5 });
+    assert('5M 跨入 40% → 1,088,300', calcProgressiveTax(5000000), 1088300, { approx: true, tol: 1 });
+
+    // ============================================================
+    group('calcDividendTax — 股利所得稅 (合併 vs 分離)');
+    // ============================================================
+    {
+      // 股利 50k + 其他所得 500k → 全部仍 < 590k 級距上限,均 5%
+      // A: addTax = 50k × 5% = 2,500;抵減 = 50k × 8.5% = 4,250;netA = -1,750 (退稅)
+      // B: 50k × 28% = 14,000
+      const r = calcDividendTax(50000, 500000);
+      assert('A 增加稅 2,500', r.methodA.additionalTax, 2500, { approx: true, tol: 0.5 });
+      assert('A 抵減 4,250', r.methodA.credit, 4250);
+      assert('A 淨 −1,750 (退稅)', r.methodA.netTax, -1750, { approx: true, tol: 0.5 });
+      assert('B 14,000', r.methodB.netTax, 14000);
+      assert('低所得族群 → A 較優', r.better, 'A');
+    }
+    {
+      // 股利 1M + 其他所得 5M → 加進去後 6M 仍在 40% 級距 (≤ 7.47M)
+      // A: addTax = 1M × 40% = 400,000;抵減觸頂 80,000;netA = 320,000
+      // B: 1M × 28% = 280,000
+      const r = calcDividendTax(1000000, 5000000);
+      assert('A 抵減觸頂 80,000', r.methodA.credit, 80000);
+      assert('A 增加稅 400,000', r.methodA.additionalTax, 400000, { approx: true, tol: 1 });
+      assert('B 280,000', r.methodB.netTax, 280000);
+      assert('高所得族群 → B 較優', r.better, 'B');
+    }
+    assert('0 股利 → 兩方案皆 0', calcDividendTax(0, 500000).methodA.netTax, 0);
   }
 
   function render() {
