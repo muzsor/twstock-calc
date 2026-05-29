@@ -59,7 +59,7 @@
 </head>
 <body>
 <h1>Calculator 單元測試</h1>
-<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy / calcExDividendPrice / calcCashDividendIncome / calcStockDividendShares / calcFillDividendGain / calcDividendYield / calcProgressiveTax / calcDividendTax)</div>
+<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy / calcExDividendPrice / calcCashDividendIncome / calcStockDividendShares / calcFillDividendGain / calcDividendYield / calcCostReduction / calcProgressiveTax / calcDividendTax)</div>
 <div id="summary" class="summary loading">載入中…</div>
 <table>
   <thead>
@@ -133,7 +133,8 @@
             calcBreakeven, calcTargetPrice, snapPriceToTick, calcScenarioProfit,
             calcMultiBuy,
             calcExDividendPrice, calcCashDividendIncome, calcStockDividendShares,
-            calcFillDividendGain, calcDividendYield, calcProgressiveTax, calcDividendTax,
+            calcFillDividendGain, calcDividendYield, calcCostReduction,
+            calcProgressiveTax, calcDividendTax,
             FEE_RATE, TAX_RATES } = C;
 
     // ============================================================
@@ -553,23 +554,89 @@
     assert('負股利視為 0 (clamp)', calcExDividendPrice(100, -1, 0), 100);
 
     // ============================================================
-    group('calcCashDividendIncome — 現金股利 (含二代健保)');
+    group('calcCashDividendIncome — 現金/股票股利 (含二代健保)');
     // ============================================================
+    // 健保署規定:現金股利 + 股票股利(按面額)合併計算,單次給付 [20,000, 10,000,000] 才扣 2.11%
     {
+      // 純現金 gross 未達門檻 → 不扣
       const r = calcCashDividendIncome(5000, 1.5, 0.0211, 20000);
       assert('5000 × 1.5 → gross 7,500', r.gross, 7500);
       assert('7,500 < 20,000 起徵點 → 不扣', r.healthIns, 0);
+      assert('未傳股票股利 → stockGross 0', r.stockGross, 0);
+      assert('totalGross 7,500', r.totalGross, 7500);
       assert('實領 = 7,500', r.net, 7500);
     }
     {
+      // 純現金 gross 達門檻 → 扣 2.11% (對照健保署試算器:25,000 → 528)
       const r = calcCashDividendIncome(10000, 2.5, 0.0211, 20000);
       assert('10,000 × 2.5 → gross 25,000', r.gross, 25000);
-      assert('floor(25,000 × 2.11%) = 527', r.healthIns, 527);
-      assert('實領 = 24,473', r.net, 24473);
+      assert('totalGross 25,000', r.totalGross, 25000);
+      assert('round(25,000 × 2.11%) = 528', r.healthIns, 528);
+      assert('實領 = 24,472', r.net, 24472);
     }
     {
+      // 純股票股利,面額達門檻:10,000 股 × 3 元 = 30,000 面額
+      // floor(30,000 × 2.11%) = 633 (= 健保署官網範例:周先生 30,000 股利 → 633)
+      const r = calcCashDividendIncome(10000, 0, 0.0211, 20000, 3);
+      assert('現金 gross = 0', r.gross, 0);
+      assert('股票面額 = 持股 × 股利元 = 30,000', r.stockGross, 30000);
+      assert('totalGross 30,000', r.totalGross, 30000);
+      assert('健保 633 (對照官網範例)', r.healthIns, 633);
+      assert('實領 = -633 (純股票需另繳)', r.net, -633);
+    }
+    {
+      // 純股票股利,面額未達門檻:10,000 × 1 = 10,000 < 20,000 → 不扣
+      const r = calcCashDividendIncome(10000, 0, 0.0211, 20000, 1);
+      assert('股票面額 10,000 < 門檻', r.stockGross, 10000);
+      assert('健保 0', r.healthIns, 0);
+      assert('實領 0', r.net, 0);
+    }
+    {
+      // 使用者 bug 場景:cash 10,000 + stock face 15,000 = 25,000 ≥ 20,000
+      // 雖然現金 < 門檻、股票 < 門檻,但合計達 → 合併扣 round(25,000 × 2.11%) = 528
+      const r = calcCashDividendIncome(10000, 1, 0.0211, 20000, 1.5);
+      assert('現金 10,000 < 門檻 (單獨不扣)', r.gross, 10000);
+      assert('股票面額 15,000 (單獨不扣)', r.stockGross, 15000);
+      assert('合計 25,000 ≥ 門檻', r.totalGross, 25000);
+      assert('合併扣 528', r.healthIns, 528);
+      assert('實領 = 10,000 - 528 = 9,472', r.net, 9472);
+    }
+    {
+      // 合計仍未達門檻:cash 5,000 + stock 10,000 = 15,000 < 20,000 → 不扣
+      const r = calcCashDividendIncome(10000, 0.5, 0.0211, 20000, 1);
+      assert('合計 15,000 < 門檻 → 不扣', r.healthIns, 0);
+      assert('實領 = 5,000', r.net, 5000);
+    }
+    {
+      // 兩者都達門檻:cash 25,000 + stock face 30,000 = 55,000
+      // round(55,000 × 2.11%) = round(1160.5) = 1,161 ; net = 25,000 - 1,161 = 23,839
+      const r = calcCashDividendIncome(10000, 2.5, 0.0211, 20000, 3);
+      assert('合計 55,000', r.totalGross, 55000);
+      assert('合併扣 1,161', r.healthIns, 1161);
+      assert('實領 = 23,839', r.net, 23839);
+    }
+    {
+      // 1,000 萬上限:cash 10M + stock face 5M = 15M → feeBase 截為 10M
+      // healthIns = floor(10,000,000 × 2.11%) = 211,000
+      const r = calcCashDividendIncome(1000000, 10, 0.0211, 20000, 5);
+      assert('現金 10M', r.gross, 10000000);
+      assert('股票面額 5M', r.stockGross, 5000000);
+      assert('totalGross 15M', r.totalGross, 15000000);
+      assert('feeBase 截為 1,000 萬 → 健保 211,000', r.healthIns, 211000);
+      assert('實領 = 10M - 211,000 = 9,789,000', r.net, 9789000);
+    }
+    {
+      // 上限邊界:合計剛好 1,000 萬 (不截) → 211,000
+      const r = calcCashDividendIncome(1000000, 10, 0.0211, 20000);
+      assert('合計剛好 1,000 萬', r.totalGross, 10000000);
+      assert('健保 211,000 (未截)', r.healthIns, 211000);
+    }
+    {
+      // 0 股 → 全 0 (個別欄位驗證避免 deepEq 對新欄位敏感)
       const r = calcCashDividendIncome(0, 5, 0.0211, 20000);
-      assert('0 股 → 0/0/0', r, { gross: 0, healthIns: 0, net: 0 });
+      assert('0 股 gross', r.gross, 0);
+      assert('0 股 healthIns', r.healthIns, 0);
+      assert('0 股 net', r.net, 0);
     }
 
     // ============================================================
@@ -623,6 +690,51 @@
     assert('5M 跨入 40% → 1,088,300', calcProgressiveTax(5000000), 1088300, { approx: true, tol: 1 });
 
     // ============================================================
+    group('calcCostReduction — 除權息後每股成本降低');
+    // ============================================================
+    {
+      // 純現金股利:50 買進 10000 股,現金股利 2.5/股,無補充保費
+      // originalCost = 500,000;netCash = 25,000;newShares = 10,000
+      // newCostTotal = 500000 − 25000 = 475,000
+      // newCostPerShare = 475000 / 10000 = 47.5
+      // costReduction = 50 − 47.5 = 2.5 (= 現金股利,符合直覺)
+      const r = calcCostReduction(50, 10000, 2.5, 0, 0);
+      assert('原成本 500,000', r.originalCost, 500000);
+      assert('實領現金 25,000', r.netCash, 25000);
+      assert('新股數 10,000', r.newShares, 10000);
+      assert('降低後總成本 475,000', r.newCostTotal, 475000);
+      assert('新每股成本 47.5', r.newCostPerShare, 47.5);
+      assert('成本降低 2.5', r.costReduction, 2.5);
+      assert('降低 5%', r.costReductionPct, 5, { approx: true, tol: 1e-9 });
+    }
+    {
+      // 純股票股利:50 買進 10000 股,股票股利 1 元(配 0.1 股),無現金
+      // 配股不降總成本,只稀釋每股成本:
+      // newCostTotal = 500,000 (不變);newShares = 11000;newCostPerShare ≈ 45.45
+      const r = calcCostReduction(50, 10000, 0, 1, 0);
+      assert('純配股總成本不變', r.newCostTotal, 500000);
+      assert('新股數 11,000 (含配股)', r.newShares, 11000);
+      assert('新每股成本 ≈ 45.45', r.newCostPerShare, 45.45);
+      assert('成本降低 ≈ 4.55', r.costReduction, 4.55);
+    }
+    {
+      // 混合情境 (與 calcCashDividendIncome 合併計算對齊):
+      // cash 25,000 + stock face 10,000 = 35,000 → round(35000 × 0.0211) = 739
+      // netCash = 25,000 − 739 = 24,261
+      // newCostTotal = 500,000 − 24,261 = 475,739
+      // newCostPerShare = 475,739 / 11,000 ≈ 43.25
+      const r = calcCostReduction(50, 10000, 2.5, 1, 739);
+      assert('實領 24,261 (扣合併補充保費)', r.netCash, 24261);
+      assert('降低後總成本 475,739', r.newCostTotal, 475739);
+      assert('新每股成本 ≈ 43.25', r.newCostPerShare, 43.25);
+      assert('成本降低 ≈ 6.75', r.costReduction, 6.75);
+    }
+    assert('買進成本 0 → 全 0',     calcCostReduction(0, 10000, 2.5, 0, 0).costReduction, 0);
+    assert('持股 0 → 全 0',         calcCostReduction(50, 0, 2.5, 0, 0).costReduction, 0);
+    assert('股利全 0 → 不降低',     calcCostReduction(50, 10000, 0, 0, 0).costReduction, 0);
+    assert('股利全 0 → 新成本同舊', calcCostReduction(50, 10000, 0, 0, 0).newCostPerShare, 50);
+
+    // ============================================================
     group('calcDividendTax — 股利所得稅 (合併 vs 分離)');
     // ============================================================
     {
@@ -633,7 +745,7 @@
       assert('A 增加稅 2,500', r.methodA.additionalTax, 2500, { approx: true, tol: 0.5 });
       assert('A 抵減 4,250', r.methodA.credit, 4250);
       assert('A 淨 −1,750 (退稅)', r.methodA.netTax, -1750, { approx: true, tol: 0.5 });
-      assert('B 14,000', r.methodB.netTax, 14000);
+      assert('B 14,000', r.methodB.netTax, 14000, { approx: true, tol: 1e-6 });
       assert('低所得族群 → A 較優', r.better, 'A');
     }
     {

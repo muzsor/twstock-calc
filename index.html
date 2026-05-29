@@ -42,11 +42,9 @@
 <link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>">
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icons/icon.svg" media="(prefers-color-scheme: dark)">
-<link rel="apple-touch-icon" href="icons/icon-light.svg" media="(prefers-color-scheme: light)">
-<link rel="apple-touch-icon" href="icons/icon.svg">
-<link rel="stylesheet" href="styles.css?v=1.3.1">
-<script defer src="app.js?v=1.3.1"></script>
+<link rel="apple-touch-icon" href="icons/icon-light.svg">
+<link rel="stylesheet" href="styles.css?v=1.4.0">
+<script defer src="app.js?v=1.4.0"></script>
 </head>
 <body>
   <div class="container">
@@ -204,7 +202,7 @@
           <div class="field-error" id="sellPriceError" role="alert"></div>
         </div>
 
-        <div class="field">
+        <div class="field field-snap">
           <label>快捷對齊</label>
           <div class="snap-bar">
             <button type="button" id="snapBreakeven" class="snap-action">對齊損益兩平</button>
@@ -444,11 +442,19 @@
           <div class="help">合計 <strong id="dividendSharesTotal">10,000</strong> 股</div>
           <div class="field-error" id="dividendSharesError" role="alert"></div>
         </div>
+
+        <div class="field">
+          <label for="dividendBuyCost">我的買進成本(每股,選填)</label>
+          <input type="number" id="dividendBuyCost" value="0" step="0.01" min="0" inputmode="decimal">
+          <div class="help">填寫每股實際買進均價,試算除權息後成本降低多少;0 或留空則不顯示</div>
+          <div class="field-error" id="dividendBuyCostError" role="alert"></div>
+        </div>
       </div><!-- /card 除權息條件 -->
 
       <div class="card" aria-live="polite" aria-atomic="false">
         <h2>除權息試算結果</h2>
 
+        <!-- 股價變化群組:參考價 → 填權息 → 殖利率 -->
         <div class="result-section">
           <div class="result-row big" id="exDivPriceRow">
             <span class="label">除權息參考價</span>
@@ -458,37 +464,6 @@
             <span class="label">└ 股價蒸發</span>
             <span class="value" id="priceDrop">-</span>
           </div>
-        </div>
-
-        <div class="result-section" id="cashIncomeSection">
-          <div class="result-row">
-            <span class="label">現金股利收入</span>
-            <span class="value" id="dividendGross">-</span>
-          </div>
-          <div class="result-row sub" id="healthInsRow" hidden>
-            <span class="label">└ 二代健保補充保費</span>
-            <span class="value" id="healthInsFee">-</span>
-          </div>
-          <div class="result-row highlight">
-            <span class="label">實領現金</span>
-            <span class="value" id="dividendNet">-</span>
-          </div>
-        </div>
-
-        <div class="result-section" id="stockAllocSection" hidden>
-          <div class="result-row">
-            <span class="label">配股數</span>
-            <span class="value" id="allocatedShares">-</span>
-          </div>
-          <div class="result-row highlight">
-            <span class="label">配股後總股數</span>
-            <span class="value" id="totalSharesAfter">-</span>
-          </div>
-          <div class="result-row sub">
-            <span class="label">└ 整股 / 畸零股</span>
-            <span class="value" id="wholeFractionShares">-</span>
-          </div>
-          <div class="help" style="margin-top: 8px;">※ 畸零股(&lt; 1 股)由發行公司公告以市價換現金</div>
         </div>
 
         <div class="result-section">
@@ -515,6 +490,62 @@
             <span class="label">總殖利率</span>
             <span class="value" id="totalYield">-</span>
           </div>
+        </div>
+
+        <!-- 我會拿到什麼:現金 → 股數 → 降低後總成本 -->
+        <div class="result-section" id="cashIncomeSection">
+          <div class="result-row">
+            <span class="label">現金股利收入</span>
+            <span class="value" id="dividendGross">-</span>
+          </div>
+          <div class="result-row sub" id="healthInsRow" hidden>
+            <span class="label">└ 二代健保補充保費</span>
+            <span class="value" id="healthInsFee">-</span>
+          </div>
+          <div class="result-row sub" id="healthInsBasisRow" hidden>
+            <span class="label">└ 合計給付</span>
+            <span class="value" id="healthInsBasis">-</span>
+          </div>
+          <div class="result-row big money">
+            <span class="label">實領現金</span>
+            <span class="value" id="dividendNet">-</span>
+          </div>
+          <div class="help" id="healthInsHelp" style="margin-top: 8px;" hidden>
+            ※ 依健保署規定:同一基準日的現金股利與股票股利為「同一次給付」,合併計算;股票股利按每股面額 10 元計算<br>
+            ※ 單次給付達 2 萬元以上、未超過 1,000 萬元部分扣繳 2.11%
+          </div>
+        </div>
+
+        <div class="result-section" id="stockAllocSection" hidden>
+          <div class="result-row">
+            <span class="label">配股數</span>
+            <span class="value" id="allocatedShares">-</span>
+          </div>
+          <div class="result-row highlight">
+            <span class="label">配股後總股數</span>
+            <span class="value" id="totalSharesAfter">-</span>
+          </div>
+          <div class="result-row sub">
+            <span class="label">└ 整股 / 畸零股</span>
+            <span class="value" id="wholeFractionShares">-</span>
+          </div>
+          <div class="help" style="margin-top: 8px;">※ 畸零股(&lt; 1 股)由發行公司公告以市價換現金</div>
+        </div>
+
+        <div class="result-section" id="costReductionSection" hidden>
+          <div class="result-row big compact">
+            <span class="label">除權息後總持有成本</span>
+            <span class="value" id="newCostTotal">-</span>
+          </div>
+          <div class="result-row sub">
+            <span class="label">└ 每股成本</span>
+            <span class="value" id="newCostPerShare">-</span>
+          </div>
+          <div class="result-row sub">
+            <span class="label">└ 降低幅度</span>
+            <span class="value" id="newCostReduction">-</span>
+          </div>
+          <div class="help" style="margin-top: 8px;">※ 以使用者輸入的買進均價為基準,不含買進手續費等實際成本</div>
         </div>
 
         <div class="result-section tax-section">

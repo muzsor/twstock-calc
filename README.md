@@ -1,6 +1,6 @@
 # 📈 台股交易計算機
 
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-ready-success.svg)](#%EF%B8%8F-開發)
 
@@ -36,7 +36,7 @@
 兩種主要模式，共用同一套主題與行動裝置體驗：
 
 - 🧮 **交易試算** — 算手續費、證交稅、借券費，反推損益兩平與目標報酬價;支援做多/做空、多筆加碼/回補
-- 💰 **除權息試算** — 算除權息參考價、配股配息、填權息所需漲幅、二代健保補充保費，以及股利所得稅的「合併課稅 vs 分離課稅」擇優建議
+- 💰 **除權息試算** — 算除權息參考價、配股配息、填權息所需漲幅、二代健保補充保費(含股票股利合併計算)、除權息後持有成本變化,以及股利所得稅的「合併課稅 vs 分離課稅」擇優建議
 
 跨模式共用的東西：
 
@@ -97,21 +97,33 @@
 - 除權息前股價
 - 現金股利、股票股利(各自可填 0，純除權或純除息都支援)
 - 持股數量(獨立的「張/股」單位，不跟交易模式共用)
+- **我的買進成本(每股,選填)** — 填了才會試算除權息後成本如何下降
 
 齒輪 popover 內的進階設定：
 
-- **二代健保補充保費率**(預設 2.11%，2024 年起費率)
-- **補充保費起徵點**(預設 20,000 元，單筆股利達此金額才扣)
+- **二代健保補充保費率**(預設 2.11%,110 年(2021)起施行)
+- **補充保費起徵點**(預設 20,000 元,現金股利 + 股票股利(按面額)合計達此金額才扣)
 - **股利以外綜合所得淨額**(用於精算股利所得稅的邊際稅率)
 
 ### 🧾 試算結果
 
+依「股價變化」與「我會拿到什麼」兩大群組排版:
+
+**股價變化**
+
 - **除權息參考價** + 股價蒸發金額
-- **現金股利收入**：總額 / 二代健保補充保費(達門檻才扣) / 實領
-- **配股後總股數**：整股 + 畸零股(小數)拆解，並提示畸零股換現金以發行公司公告為準
-- **填權息**：所需漲幅 + 目標價(= 除權息前股價)
-- **殖利率**：現金 / 股票 / 合計(以面額計)
-- **股利所得稅試算**：**A. 合併課稅(8.5% 抵減，上限 8 萬)** vs **B. 分離課稅(28%)**，以累進稅率精算「股利造成的額外稅」，自動標示推薦方案，A 案抵減 > 應納稅時顯示退稅(負值)
+- **填權息**:所需漲幅 + 目標價(= 除權息前股價)
+- **殖利率**:現金 / 股票 / 合計(以面額計)
+
+**我會拿到什麼**
+
+- **現金股利收入** + 二代健保補充保費(現金 + 股票股利合併計算,達 2 萬門檻才扣)/ **實領現金**(金色強調 — 真正能入袋的金額)
+- **配股後總股數**:整股 + 畸零股(小數)拆解,並提示畸零股換現金以發行公司公告為準
+- **除權息後總持有成本**(填了買進成本才出現):新總成本 + 每股新成本 + 降低幅度;讓投資人看到配息配股後資金實質佔用變化
+
+**股利所得稅**
+
+- **A. 合併課稅(8.5% 抵減,上限 8 萬)** vs **B. 分離課稅(28%)**,以累進稅率精算「股利造成的額外稅」,自動標示推薦方案,A 案抵減 > 應納稅時顯示退稅(負值)
 
 ---
 
@@ -179,7 +191,7 @@
 | 配股後股數 | `持股 × (1 + 股票股利 / 10)` | 1 元股票股利 = 配 0.1 股 |
 | 填權息漲幅 | `(除權息前股價 / 參考價 − 1) × 100%` | 目標 = 回到除權息前股價 |
 | 現金/股票殖利率 | `股利 / 除權息前股價 × 100%` | 以面額計 |
-| 二代健保補充保費 | `floor(單筆股利 × 費率)`，單筆 ≥ 起徵點才扣 | 2024 年起 2.11% / 20,000 |
+| 二代健保補充保費 | `round(feeBase × 2.11%)`,其中 `feeBase = min(現金 gross + 股票面額 gross, 1,000 萬)`,合計 ≥ 20,000 才扣 | 依健保署規定:同一基準日現金 + 股票股利視為「同一次給付」,合併計算;股票股利按每股面額 10 元計 |
 
 </details>
 
@@ -207,7 +219,7 @@
 | `styles.css` | 所有樣式 |
 | `app.js` | 主應用邏輯：純計算函數、UI 渲染、事件、持久化、PWA 註冊 |
 | `sw.js` | Service Worker(cache-first、同源限定) |
-| `tests.html` | 178 個單元測試(iframe 載入 `index.html`，讀 `window.__calc`) |
+| `tests.html` | 完整單元測試覆蓋(iframe 載入 `index.html`，讀 `window.__calc`) |
 
 <details>
 <summary>🚀 本機啟動</summary>
@@ -247,12 +259,12 @@ python -m http.server 8765
 <details>
 <summary>🧪 單元測試</summary>
 
-開啟 [tests.html](tests.html) 即可看到 178 個單元測試的執行結果。
+開啟 [tests.html](tests.html) 即可看到 完整單元測試覆蓋的執行結果。
 
 測試透過 `<iframe>` 載入 `index.html`，讀取 `window.__calc` 暴露的純函數來驗證計算邏輯：
 
 - **交易**：`fmtMoney` / `calcFee` / `calcSide` / `calcMultiBuy` / `calcBreakeven` / `calcTargetPrice` / `snapPriceToTick` / `getTickSize` / `calcScenarioProfit`
-- **除權息**：`calcExDividendPrice` / `calcCashDividendIncome` / `calcStockDividendShares` / `calcFillDividendGain` / `calcDividendYield` / `calcProgressiveTax` / `calcDividendTax`
+- **除權息**：`calcExDividendPrice` / `calcCashDividendIncome` / `calcStockDividendShares` / `calcFillDividendGain` / `calcDividendYield` / `calcCostReduction` / `calcProgressiveTax` / `calcDividendTax`
 
 UI 互動部分(reset / copy / snap 按鈕、localStorage 持久化、滾輪、方向切換、Tab 切換、商品類型按鈕、模式切換)需手動驗證。
 

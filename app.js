@@ -5,7 +5,7 @@
 // (設定 data-theme 與 data-app-mode),不能搬到此外部檔。
 
   const $ = id => document.getElementById(id);
-  const APP_VERSION = '1.3.1';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
+  const APP_VERSION = '1.4.0';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const DIVIDEND_STORAGE_KEY = 'twStockCalc.dividend.v1';   // 除權息獨立持久化
   const APP_MODE_KEY = 'twStockCalc.appMode';                // 頂層模式
@@ -17,6 +17,7 @@
   const PERSIST_KEYS = ['direction', 'unit', 'sellPrice',
                         'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
   const DIVIDEND_PERSIST_KEYS = ['prePrice', 'cashDividend', 'stockDividend', 'dividendShares',
+                                 'dividendBuyCost',
                                  'healthRate', 'healthThreshold', 'otherIncome'];
   const MAX_BUY_ENTRIES = 10;  // 加碼上限
   const ENTRY_NUMERALS = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
@@ -30,6 +31,7 @@
   const DIVIDEND_DEFAULTS = {
     prePrice: 50, cashDividend: 2.5, stockDividend: 0,
     dividendShares: 10, dividendUnit: 'lot',
+    dividendBuyCost: 0,    // 0 = 不啟用成本降低試算
     healthRate: 2.11, healthThreshold: 20000,
     otherIncome: 600000,   // 落在 12% 級距
   };
@@ -271,6 +273,7 @@
   const DIVIDEND_CREDIT_RATE = 0.085;
   const DIVIDEND_CREDIT_CAP  = 80000;
   const DIVIDEND_SEPARATE_RATE = 0.28;
+  const HEALTH_INS_CAP = 10_000_000;  // 二代健保補充保費單次給付計收上限 (超過部分不扣)
 
   function calcExDividendPrice(prePrice, cashDividend, stockDividend) {
     if (!(prePrice > 0)) return 0;
@@ -281,16 +284,37 @@
     return (prePrice - cash) / denom;
   }
 
-  function calcCashDividendIncome(shares, cashDividend, healthRate, healthThreshold) {
-    const s    = Math.max(0, shares || 0);
-    const cash = Math.max(0, cashDividend || 0);
-    const rate = Math.max(0, healthRate || 0);
-    const thr  = Math.max(0, healthThreshold || 0);
+  // 現金股利收入 + 二代健保補充保費
+  //   依健保署規定 (https://www.nhi.gov.tw/ch/cp-2893-bba7c-3150-1.html):
+  //     - 股票股利「以股票之面額每股 10 元計算」應扣補充保費 (非市價)
+  //     - 同一基準日的現金股利與股票股利視為「同一次給付」,合併判定門檻
+  //     - 單次給付達 20,000 元以上、未超過 1,000 萬部分才計入計收基數
+  //     - 費率 2.11% (自 110/1/1 起)
+  //     - 保費金額四捨五入到元 (對齊健保署 cloudicweb.nhi.gov.tw/esrv/trialbill 試算器)
+  //   公式:
+  //     - 現金 gross  = shares × cashDividend
+  //     - 股票面額 gross = shares × stockDividend  (= 持股 × 股利元/股 = 面額金額)
+  //     - totalGross = cash + stock face value
+  //     - feeBase    = min(totalGross, 10,000,000)
+  //     - healthIns  = totalGross >= threshold ? round(feeBase × rate) : 0
+  //   補充保費全額從現金股利扣繳;若現金不足由股東另繳 (此處不分流,net 可能為負)
+  //   第 5 個 arg `stockDividend` 為選填,沒提供時 stockGross = 0、不影響舊呼叫者
+  function calcCashDividendIncome(shares, cashDividend, healthRate, healthThreshold, stockDividend) {
+    const s     = Math.max(0, shares || 0);
+    const cash  = Math.max(0, cashDividend || 0);
+    const rate  = Math.max(0, healthRate || 0);
+    const thr   = Math.max(0, healthThreshold || 0);
+    const stock = Math.max(0, stockDividend || 0);
     const gross = round2(s * cash);
-    // 補充保費:單筆給付達起徵點才扣 (無條件捨去到元)
-    const healthIns = gross >= thr ? Math.floor(gross * rate) : 0;
+    const stockGross = round2(s * stock);   // 面額計算 (股利元 = 面額金額)
+    const totalGross = round2(gross + stockGross);
+    const feeBase    = Math.min(totalGross, HEALTH_INS_CAP);
+    // 先取 4dp 清掉 JS 浮點雜訊 (2.11/100 在 IEEE 754 ≈ 0.021099999...,
+    // 直接 round(25000 × rate) 會得 527 而非 528,與健保署試算器不一致)
+    const feeAmount  = Math.round(feeBase * rate * 1e4) / 1e4;
+    const healthIns  = totalGross >= thr ? Math.round(feeAmount) : 0;
     const net = round2(gross - healthIns);
-    return { gross, healthIns, net };
+    return { gross, stockGross, totalGross, healthIns, net };
   }
 
   function calcStockDividendShares(shares, stockDividend) {
@@ -301,6 +325,36 @@
     const wholeShares = Math.floor(totalShares);
     const fractionalShares = totalShares - wholeShares;
     return { allocated, totalShares, wholeShares, fractionalShares };
+  }
+
+  // 除權息後每股成本降低多少
+  //   buyPrice:      使用者輸入的每股買進均價
+  //   shares:        原始持股 (股,已轉換)
+  //   cashDividend:  每股現金股利
+  //   stockDividend: 每股股票股利 (面額 10 元基準)
+  //   healthInsFee:  二代健保補充保費 (從現金股利中扣除,以實領現金為準)
+  //   邏輯:新每股成本 = (原總成本 − 實領現金) / 配股後總股數
+  //   忽略買進手續費等成本(以使用者輸入的「均價」為單一基準)
+  function calcCostReduction(buyPrice, shares, cashDividend, stockDividend, healthInsFee) {
+    const p     = Math.max(0, buyPrice      || 0);
+    const s     = Math.max(0, shares        || 0);
+    const cash  = Math.max(0, cashDividend  || 0);
+    const stock = Math.max(0, stockDividend || 0);
+    const ins   = Math.max(0, healthInsFee  || 0);
+    if (p <= 0 || s <= 0) {
+      return { originalCost: 0, netCash: 0, newShares: 0, newCostTotal: 0,
+               newCostPerShare: 0, costReduction: 0, costReductionPct: 0 };
+    }
+    const originalCost   = round2(p * s);
+    const netCash        = round2(s * cash - ins);
+    // 配股不改變總投入(白拿股票),只有現金股利會降總成本
+    const newCostTotal   = round2(originalCost - netCash);
+    const newShares      = s * (1 + stock / 10);
+    const newCostPerShare = newShares > 0 ? round2(newCostTotal / newShares) : 0;
+    const costReduction  = round2(p - newCostPerShare);
+    const costReductionPct = p > 0 ? (costReduction / p) * 100 : 0;
+    return { originalCost, netCash, newShares, newCostTotal,
+             newCostPerShare, costReduction, costReductionPct };
   }
 
   function calcFillDividendGain(prePrice, refPrice) {
@@ -883,6 +937,7 @@
     cashDividend:    { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
     stockDividend:   { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
     dividendShares:  { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
+    dividendBuyCost: { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
     healthRate:      { type: 'warn',  test: v => v >= 0 && v <= 10,    msg: '費率超出常見範圍 (0~10%)' },
     healthThreshold: { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
     otherIncome:     { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
@@ -929,11 +984,12 @@
     const dividendShares  = Math.max(0, parseFloat($('dividendShares').value)  || 0);
     const sharesPerUnit   = dividendUnit === 'lot' ? 1000 : 1;
     const totalShares     = dividendShares * sharesPerUnit;
+    const dividendBuyCost = Math.max(0, parseFloat($('dividendBuyCost').value) || 0);
     const healthRate      = Math.max(0, parseFloat($('healthRate').value)      || 0) / 100;
     const healthThreshold = Math.max(0, parseFloat($('healthThreshold').value) || 0);
     const otherIncome     = Math.max(0, parseFloat($('otherIncome').value)     || 0);
     return { prePrice, cashDividend, stockDividend, dividendShares,
-             sharesPerUnit, totalShares,
+             sharesPerUnit, totalShares, dividendBuyCost,
              healthRate, healthThreshold, otherIncome };
   }
 
@@ -949,14 +1005,17 @@
     validateDividendInputs();
     const inp = readDividendInputs();
     const { prePrice, cashDividend, stockDividend, totalShares,
+            dividendBuyCost,
             healthRate, healthThreshold, otherIncome } = inp;
 
     const refPrice   = calcExDividendPrice(prePrice, cashDividend, stockDividend);
     const drop       = round2(prePrice - refPrice);
-    const cashIncome = calcCashDividendIncome(totalShares, cashDividend, healthRate, healthThreshold);
+    const cashIncome = calcCashDividendIncome(totalShares, cashDividend, healthRate, healthThreshold,
+                                              stockDividend);
     const stockAlloc = calcStockDividendShares(totalShares, stockDividend);
     const fill       = calcFillDividendGain(prePrice, refPrice);
     const yieldData  = calcDividendYield(cashDividend, stockDividend, prePrice);
+    const costRed    = calcCostReduction(dividendBuyCost, totalShares, cashDividend, stockDividend, cashIncome.healthIns);
 
     // 股利所得 = 現金股利 + 股票股利(面額) 課稅
     const dividendIncome = round2(totalShares * cashDividend + totalShares * stockDividend);
@@ -966,6 +1025,7 @@
     renderDividend({
       prePrice, refPrice, drop,
       cashDividend, stockDividend, totalShares,
+      dividendBuyCost, costRed,
       cashIncome, stockAlloc, fill, yieldData,
       dividendIncome, taxData, marginalRate, otherIncome,
     });
@@ -984,12 +1044,20 @@
 
     // 現金股利收入
     $('dividendGross').textContent = fmtMoney(r.cashIncome.gross);
-    const healthRow = $('healthInsRow');
-    if (r.cashIncome.healthIns > 0) {
-      healthRow.hidden = false;
+    // 補充保費合併計算:有股票股利時顯示合計給付 sub 行 + 法規說明
+    const hasStock = r.cashIncome.stockGross > 0;
+    const showFee  = r.cashIncome.healthIns > 0;
+    $('healthInsRow').hidden      = !showFee;
+    $('healthInsBasisRow').hidden = !(hasStock && showFee);
+    $('healthInsHelp').hidden     = !hasStock;
+    if (showFee) {
       $('healthInsFee').textContent = '-' + fmtMoney(r.cashIncome.healthIns);
-    } else {
-      healthRow.hidden = true;
+      if (hasStock) {
+        $('healthInsBasis').textContent =
+          '現金 ' + fmtMoney(r.cashIncome.gross) +
+          ' + 股票面額 ' + fmtMoney(r.cashIncome.stockGross) +
+          ' = ' + fmtMoney(r.cashIncome.totalGross);
+      }
     }
     $('dividendNet').textContent = fmtMoney(r.cashIncome.net);
 
@@ -1004,6 +1072,19 @@
         r.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股';
     } else {
       stockSection.hidden = true;
+    }
+
+    // 成本降低 (僅在使用者填寫買進成本 > 0 且有持股時顯示)
+    const costSection = $('costReductionSection');
+    if (r.dividendBuyCost > 0 && r.totalShares > 0 && (r.cashDividend > 0 || r.stockDividend > 0)) {
+      costSection.hidden = false;
+      $('newCostTotal').textContent     = fmtMoney(r.costRed.newCostTotal);
+      $('newCostPerShare').textContent  = 'NT$ ' + r.costRed.newCostPerShare.toFixed(2);
+      $('newCostReduction').textContent =
+        '降 NT$ ' + r.costRed.costReduction.toFixed(2) + '/股 (' +
+        r.costRed.costReductionPct.toFixed(2) + '%)';
+    } else {
+      costSection.hidden = true;
     }
 
     // 填權息
@@ -1090,6 +1171,7 @@
     $('cashDividend').value    = DIVIDEND_DEFAULTS.cashDividend;
     $('stockDividend').value   = DIVIDEND_DEFAULTS.stockDividend;
     $('dividendShares').value  = DIVIDEND_DEFAULTS.dividendShares;
+    $('dividendBuyCost').value = DIVIDEND_DEFAULTS.dividendBuyCost;
     $('healthRate').value      = DIVIDEND_DEFAULTS.healthRate;
     $('healthThreshold').value = DIVIDEND_DEFAULTS.healthThreshold;
     $('otherIncome').value     = DIVIDEND_DEFAULTS.otherIncome;
@@ -1110,10 +1192,23 @@
       '─────────────',
       '除權息參考價: ' + $('exDivPrice').textContent,
       '股價蒸發: ' + $('priceDrop').textContent,
-      '現金股利收入: ' + $('dividendGross').textContent,
+      '填權息所需漲幅: ' + $('fillGainPct').textContent,
+      '填權息目標價: ' + $('fillTargetPrice').textContent,
+      '現金殖利率: ' + $('cashYield').textContent,
     ];
+    if (!$('stockYieldRow').hidden) {
+      lines.push('股票殖利率: ' + $('stockYield').textContent);
+    }
+    lines.push(
+      '總殖利率: ' + $('totalYield').textContent,
+      '─────────────',
+      '現金股利收入: ' + $('dividendGross').textContent,
+    );
     if (!$('healthInsRow').hidden) {
       lines.push('二代健保補充保費: ' + $('healthInsFee').textContent);
+      if (!$('healthInsBasisRow').hidden) {
+        lines.push('  合計給付: ' + $('healthInsBasis').textContent);
+      }
     }
     lines.push('實領現金: ' + $('dividendNet').textContent);
     if (!$('stockAllocSection').hidden) {
@@ -1123,17 +1218,14 @@
         '整股/畸零股: ' + $('wholeFractionShares').textContent,
       );
     }
-    lines.push(
-      '─────────────',
-      '填權息所需漲幅: ' + $('fillGainPct').textContent,
-      '填權息目標價: ' + $('fillTargetPrice').textContent,
-      '現金殖利率: ' + $('cashYield').textContent,
-    );
-    if (!$('stockYieldRow').hidden) {
-      lines.push('股票殖利率: ' + $('stockYield').textContent);
+    if (!$('costReductionSection').hidden) {
+      lines.push(
+        '除權息後總持有成本: ' + $('newCostTotal').textContent +
+          ' (每股 ' + $('newCostPerShare').textContent +
+          ',' + $('newCostReduction').textContent + ')',
+      );
     }
     lines.push(
-      '總殖利率: ' + $('totalYield').textContent,
       '─────────────',
       '邊際稅率: ' + $('marginalRateText').textContent,
       'A. 合併課稅 (8.5% 抵減) 淨稅: ' + $('taxNetA').textContent,
@@ -1544,7 +1636,7 @@
   });
 
   // 除權息輸入欄位
-  ['prePrice', 'cashDividend', 'stockDividend', 'dividendShares',
+  ['prePrice', 'cashDividend', 'stockDividend', 'dividendShares', 'dividendBuyCost',
    'healthRate', 'healthThreshold', 'otherIncome'].forEach(id => {
     const el = $(id);
     if (!el) return;
@@ -1667,9 +1759,11 @@
     calcFee, calcSide, calcBreakeven, calcTargetPrice, snapPriceToTick,
     calcScenarioProfit, calcMultiBuy,   // // 除權息純函數
     calcExDividendPrice, calcCashDividendIncome, calcStockDividendShares,
-    calcFillDividendGain, calcDividendYield, calcProgressiveTax, calcDividendTax,
+    calcFillDividendGain, calcDividendYield, calcCostReduction,
+    calcProgressiveTax, calcDividendTax,
     TAX_RATES, FEE_RATE,
     TAX_BRACKETS, DIVIDEND_CREDIT_RATE, DIVIDEND_CREDIT_CAP, DIVIDEND_SEPARATE_RATE,
+    HEALTH_INS_CAP,
   };
 
   // ============================================================

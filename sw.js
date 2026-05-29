@@ -20,7 +20,7 @@ const ASSETS = [
   './app.js',
   './tests.html',
   './manifest.json',
-  './icons/icon.svg',
+  './icons/icon-light.svg',
 ];
 
 self.addEventListener('install', e => {

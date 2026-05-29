@@ -22,7 +22,7 @@
     --border: #d0d0d0;
     --border-hover: #888888;
     --border-soft: #e0e0e0;
-    --border-dashed: #e0e0e0;
+    --border-dashed: #c0c0c0;
     --border-strong: #111111;
 
     --text-strong: #111111;
@@ -40,6 +40,11 @@
     --profit-text: #d4302a;
     --loss-bg: #1f8f4f;
     --loss-text: #1f8f4f;
+
+    /* 除權息「能拿到多少錢」強調色 — 金色系,獨立於紅綠損益 */
+    --money-bg: #fff7e0;
+    --money-border: #f59e0b;
+    --money-text: #b45309;
 
     --t-quick: 0.1s;
     --t-fast: 0.15s;
@@ -66,7 +71,7 @@
     --border: #4a4a4a;
     --border-hover: #6a6a6a;
     --border-soft: #444444;
-    --border-dashed: #444444;
+    --border-dashed: #555555;
     --border-strong: #ffffff;
 
     --text-strong: #ffffff;
@@ -82,6 +87,10 @@
 
     --profit-text: #ff5050;
     --loss-text: #4caf6a;
+
+    --money-bg: #3d3220;
+    --money-border: #f59e0b;
+    --money-text: #fbbf24;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -353,7 +362,7 @@
   .field { margin-bottom: 14px; }
   .field label {
     display: block;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--text-secondary);
     margin-bottom: 6px;
     font-weight: 500;
@@ -363,7 +372,7 @@
     padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 2px;
-    font-size: 17px;
+    font-size: 18px;
     background: var(--bg-input);
     transition: all var(--t-fast);
     color: var(--text-strong);
@@ -374,6 +383,14 @@
     box-shadow: 0 0 0 2px var(--focus-ring);
   }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+
+  /* 快捷對齊 — 用上方分隔線 + 多一點間距,做出「不同區塊」的暗示 */
+  /* 沿用 .result-section 同款 dashed token,視覺語言一致 */
+  .field-snap {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px dashed var(--border-dashed);
+  }
 
   /* 快捷對齊 — 兩個視覺對等的卡片(左:單純按鈕;右:合一的輸入組) */
   .snap-bar {
@@ -388,7 +405,7 @@
     padding: 0 14px;
     color: var(--text-secondary);
     border-radius: 2px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     white-space: nowrap;
   }
@@ -421,7 +438,7 @@
     display: flex;
     align-items: center;
     padding: 0 12px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     background: var(--bg-snap-label);
     white-space: nowrap;
@@ -429,11 +446,11 @@
   .snap-target input[type=number] {
     flex: 1;
     min-width: 0;
-    width: auto;
+    width: 0;          /* 從 0 起算讓 flex 撐大;auto 會用 input.size 內在寬度撐爆父層 min-content */
     border: none;
     background: var(--bg-input);
     text-align: center;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--text-strong);
     padding: 0 4px;
   }
@@ -443,8 +460,8 @@
     display: flex;
     align-items: center;
     padding: 0 8px;
-    font-size: 13px;
-    color: var(--text-faint);
+    font-size: 14px;
+    color: var(--text-secondary);
     background: var(--bg-input);
   }
   .snap-target button {
@@ -453,7 +470,7 @@
     border-left: 1px solid var(--border);
     background: var(--bg-btn-secondary);
     color: var(--text-strong);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     transition: background var(--t-fast);
     white-space: nowrap;
@@ -468,7 +485,9 @@
     padding: 10px 0;
     font-size: 15px;
   }
-  .result-row .label { color: var(--text-muted); }
+  /* display:flex 會蓋掉 UA [hidden] 預設,補回 (同 .popover-host / .add-entry-btn 修法) */
+  .result-row[hidden] { display: none; }
+  .result-row .label { color: var(--text-secondary); }
   .result-row .value {
     font-weight: 600;
     color: var(--text-strong);
@@ -477,7 +496,7 @@
     padding: 4px 0 8px;
     font-size: 13px;
   }
-  .result-row.sub .label { color: var(--text-faint); padding-left: 14px; }
+  .result-row.sub .label { color: var(--text-muted); padding-left: 14px; }
   .result-row.sub .value { color: var(--text-secondary); font-weight: 500; }
 
   .result-section {
@@ -497,6 +516,11 @@
     border-radius: 2px;
     border-left: 3px solid var(--border-strong);
   }
+  /* highlight row 的 label 強化:配合 bg + border-left,讓「重要中間結果」label 也明顯 */
+  .result-row.highlight .label {
+    color: var(--text-strong);
+    font-weight: 600;
+  }
   .result-row.big {
     padding: 14px 10px;
     margin: 8px -10px 4px;
@@ -506,6 +530,9 @@
   }
   .result-row.big .label { font-weight: 600; color: var(--text-on-bigbg); }
   .result-row.big .value { font-size: 24px; font-weight: 700; color: var(--text-on-bigbg); }
+  /* .big.compact — 比 .big 略小一階,給「次主要 headline」用 (例:除權息後總持有成本) */
+  .result-row.big.compact { padding: 12px 10px; font-size: 15px; }
+  .result-row.big.compact .value { font-size: 19px; }
   .result-row.profit .value { color: var(--profit-text); }
   .result-row.loss .value { color: var(--loss-text); }
   .result-row.big.profit { background: var(--profit-bg); }
@@ -514,6 +541,15 @@
   .result-row.big.loss .label,
   .result-row.big.profit .value,
   .result-row.big.loss .value { color: #fff; }
+
+  /* 除權息「能拿到多少錢」強調 — 金色,獨立於紅綠損益,避免視覺衝突 */
+  .result-row.big.money {
+    background: var(--money-bg);
+    border-left: 4px solid var(--money-border);
+    padding-left: 12px;
+  }
+  .result-row.big.money .label,
+  .result-row.big.money .value { color: var(--money-text); }
 
   /* D1 — 股利所得稅試算區塊 (兩方案比較 + 推薦標籤) */
   .tax-section-title {
@@ -579,8 +615,8 @@
   .tax-method-rows .result-row .value { font-weight: 600; }
 
   .help {
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: 13px;
+    color: var(--text-secondary);
     margin-top: 4px;
     line-height: 1.6;
   }
@@ -595,7 +631,7 @@
     min-width: 60px;
     padding: 8px 8px;
     border-radius: 2px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-secondary);
   }
   .btn-group button.active {
@@ -844,7 +880,7 @@
   .buy-entry-num {
     width: 22px;
     text-align: center;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -855,7 +891,7 @@
   }
   .buy-entry .number-stepper input[type=number] {
     padding: 8px 10px;
-    font-size: 15px;
+    font-size: 16px;
   }
   .buy-entry .stepper-btn {
     flex: 0 0 38px;
@@ -877,23 +913,23 @@
   }
   /* price 加大 (字大、欄高) */
   .buy-entry .buy-entry-price {
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 600;
     padding: 11px 12px;
   }
   /* qty 縮小 (字小、欄矮);stretch 會讓同列 stepper-btn 跟著縮 */
   .buy-entry .buy-entry-qty {
-    font-size: 13px;
+    font-size: 14px;
     padding: 6px 10px;
   }
   .buy-entry-times {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-muted);
     flex-shrink: 0;
   }
   .buy-entry-unit {
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: 13px;
+    color: var(--text-muted);
     min-width: 18px;
     flex-shrink: 0;
   }
@@ -913,19 +949,21 @@
   }
   .buy-entry-tick {
     margin-left: 28px;
-    font-size: 11px;
-    color: var(--text-faint);
+    font-size: 12px;
+    color: var(--text-muted);
     line-height: 1.4;
   }
   .buy-entry-tick.invalid { color: var(--err-color); }
 
   /* + 加碼買進 — dashed placeholder 風格 */
+  /* 邊框用 --text-faint (#888 兩模式同色) 而非 --border-hover (light/dark 不對稱) — */
+  /* 確保 placeholder 在兩個主題下可見度一致;hover 才升到 --border-strong */
   .add-entry-btn {
     display: block;
     width: 100%;
     padding: 12px;
     margin-top: 8px;
-    border: 1.5px dashed var(--border);
+    border: 1.5px dashed var(--text-faint);
     background: transparent;
     color: var(--text-secondary);
     border-radius: 4px;
@@ -949,8 +987,8 @@
   /* 平均成本 summary (≥2 筆才顯示) */
   .buy-list-summary {
     margin-top: 8px;
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: 13px;
+    color: var(--text-secondary);
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
@@ -962,8 +1000,8 @@
     font-weight: 600;
   }
   .buy-list-count {
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: 13px;
+    color: var(--text-secondary);
     font-weight: 400;
     margin-left: 6px;
   }
@@ -1209,6 +1247,10 @@
     .action-bar { justify-content: center; }
     .action-bar-tools { justify-content: center; }
     .result-row.big .value { font-size: 21px; }
+    .result-row.big.compact .value { font-size: 17px; }
+    /* 行動下卡片 padding 較小 (18px),縮減 highlight/big 的負 margin 避免背景貼卡片邊 */
+    .result-row.highlight { margin-left: -4px; margin-right: -4px; }
+    .result-row.big       { margin-left: -4px; margin-right: -4px; }
     /* B6 — 行動裝置觸控目標加大 */
     .btn-group button {
       min-height: 44px;
@@ -1279,7 +1321,8 @@
     .mobile-result-bar-track {
       position: relative;
       flex: 1;
-      min-width: 40px;
+      min-width: 0;     /* 損益數字長 + 報酬率長 + CTA 都 flex-shrink:0,
+                           track 撐住 40 會把整列頂出 viewport,造成水平滾動 */
       height: 8px;
       background: var(--bg-highlight);
       border-radius: 4px;
