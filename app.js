@@ -5,7 +5,7 @@
 // (設定 data-theme 與 data-app-mode),不能搬到此外部檔。
 
   const $ = id => document.getElementById(id);
-  const APP_VERSION = '1.4.0';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
+  const APP_VERSION = '1.4.1';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const DIVIDEND_STORAGE_KEY = 'twStockCalc.dividend.v1';   // 除權息獨立持久化
   const APP_MODE_KEY = 'twStockCalc.appMode';                // 頂層模式
@@ -13,9 +13,8 @@
   const TAB_KEY = 'twStockCalc.activeTab';
   const RANGE_KEY = 'twStockCalc.rangeHalf';  // 區間試算上下列數
   // 全部輸入欄位都持久化,重新整理可直接接續上次的試算
-  // buyEntries 為陣列,獨立處理 (不在 PERSIST_KEYS 字串清單中)
-  const PERSIST_KEYS = ['direction', 'unit', 'sellPrice',
-                        'productType', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
+  // DOM 欄位用 PERSIST_DOM_KEYS;JS 模組狀態 (direction/unit/productType) 與 buyEntries 在 save/load 顯式處理
+  const PERSIST_DOM_KEYS = ['sellPrice', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
   const DIVIDEND_PERSIST_KEYS = ['prePrice', 'cashDividend', 'stockDividend', 'dividendShares',
                                  'dividendBuyCost',
                                  'healthRate', 'healthThreshold', 'otherIncome'];
@@ -36,6 +35,8 @@
     otherIncome: 600000,   // 落在 12% 級距
   };
   const TAX_RATES = { stock: 0.003, etf: 0.001, daytrade: 0.0015, none: 0 };
+  // 報告用,與 #productTypeGroup 按鈕文字一致
+  const PRODUCT_LABELS = { stock: '一般 (0.3%)', etf: 'ETF (0.1%)', daytrade: '當沖 (0.15%)', none: '免稅' };
   const FEE_RATE = 0.001425;
   const THEME_COLORS = { light: '#f5f5f5', dark: '#000000' };  // 對應 meta theme-color
   // Favicon 雙版本 (data URL,瞬間切換無 network 請求)
@@ -59,6 +60,11 @@
   let buyEntries = cloneDefaultBuyEntries();  // 多筆加碼,動態陣列
   let appMode = 'trade';                      // 'trade' | 'dividend'
   let dividendUnit = DIVIDEND_DEFAULTS.dividendUnit;   // 除權息獨立單位 (張/股)
+  // 報告 (buildReportText / buildDividendReportText) 從 snapshot 讀,不反讀 DOM textContent
+  let lastTradeData = null;
+  let lastDividendData = null;
+  // 區間表狀態:'empty' / 'rows';切換才重建 <tr>,同模式內只動 cell
+  let _rangeTableMode = 'empty';
   // 從 <head> 早於 style 的 init script 已設好 data-theme-mode,讀回來避免雙重邏輯
   let themeMode = document.documentElement.getAttribute('data-theme-mode') || 'auto';
 
@@ -74,8 +80,8 @@
     const sign = n < 0 ? '-' : '';
     const abs = Math.abs(n);
     if (dp === undefined || dp === null) {
-      // 嚴格判斷:小於 1e-6 才視為整數,避免漏顯示真的有小數的金額
-      const hasDecimal = Math.abs(abs - Math.round(abs)) > 1e-6;
+      // 小數部分 < 0.005 時 toFixed(2) 已會 round 回整數,不必再顯示 .00
+      const hasDecimal = Math.abs(abs - Math.round(abs)) >= 0.005;
       dp = hasDecimal ? 2 : 0;
     }
     return sign + 'NT$ ' + fmtNum(abs, dp);
@@ -281,7 +287,8 @@
     const stock = Math.max(0, stockDividend || 0);
     const denom = 1 + stock / 10;
     if (denom <= 0) return 0;
-    return (prePrice - cash) / denom;
+    // 病態輸入 (cash > prePrice) 會跑出負參考價,鎖在 0
+    return Math.max(0, (prePrice - cash) / denom);
   }
 
   // 現金股利收入 + 二代健保補充保費
@@ -602,12 +609,13 @@
     borrowRate:   { type: 'warn',  test: v => v >= 0 && v <= 50,                msg: '年化費率超出常見範圍(0~50%)，請確認' },
     targetReturn: { type: 'warn',  test: v => v >= -100 && v <= 100,            msg: '報酬率超出常見範圍 (±100%)' },
   };
-  function validateInputs() {
-    Object.entries(VALIDATORS).forEach(([id, { type, test, msg }]) => {
+  // 共用驗證套用:讀 input value、跑 test、套用 has-error / has-warn class + aria
+  //   skipPredicate(id) → 回 true 則跳過 (例如借券欄在做多時隱藏)
+  function applyValidators(validators, skipPredicate) {
+    Object.entries(validators).forEach(([id, { type, test, msg }]) => {
       const el = $(id);
       if (!el) return;
-      // 借券欄在做多時隱藏 → 跳過驗證避免誤標
-      if ((id === 'borrowRate' || id === 'borrowDays') && direction !== 'short') {
+      if (skipPredicate && skipPredicate(id)) {
         clearFieldError(id, el);
         return;
       }
@@ -627,6 +635,11 @@
         if (errEl) errEl.textContent = msg;
       }
     });
+  }
+  function validateInputs() {
+    applyValidators(VALIDATORS, id =>
+      (id === 'borrowRate' || id === 'borrowDays') && direction !== 'short'
+    );
     validateBuyEntries();
   }
   // 多筆買進驗證 (顯示在 #buyListField 上,訊息列在 #buyEntriesError)
@@ -749,14 +762,28 @@
     $('returnRate').textContent    = (returnRate > 0 ? '+' : '') + (isFinite(returnRate) ? returnRate.toFixed(2) : '0.00') + '%';
     $('breakeven').textContent     = breakeven > 0 ? 'NT$ ' + breakeven.toFixed(2) : '-';
 
+    // snapshot 給 buildReportText 用
+    lastTradeData = {
+      direction, unit, productType,
+      buyEntries: buyEntries.map(e => ({ price: e.price, qty: e.qty })),
+      sellPriceInput: $('sellPrice').value,
+      discount, discountInput: $('discount').value,
+      borrowRateInput: $('borrowRate').value, borrowDaysInput: $('borrowDays').value,
+      shares, avgCost,
+      buyAmount, buyFee, totalCost,
+      sellAmount: sell.amount, sellFee: sell.fee, tax: sell.tax, borrowFee: sell.borrowFee,
+      netSell, netPerShare: shares > 0 ? netSell / shares : 0,
+      profit, returnRate, breakeven, totalFees,
+    };
+
     const cls = profit >= 0 ? 'profit' : 'loss';
     $('profitRow').className = 'result-row big ' + cls;
     $('returnRow').className = 'result-row ' + cls;
     updateReturnBar(returnRate);
     updateMobileBar(profit, returnRate);
 
-    // 共用設定 (discount, minFee) 變動時,也同步更新區間試算
-    renderRangeTable();
+    // 區間試算只在 active 時重畫;切回 range tab 由 switchTab 觸發
+    if (activeTab === 'range') renderRangeTable();
   }
 
   // ============================================================
@@ -797,7 +824,10 @@
     elFixedLabel.textContent = isShort ? '放空淨收入' : '買進總成本';
 
     if (shares <= 0 || center <= 0 || sellPrice <= 0) {
-      body.innerHTML = '<tr><td colspan="3" class="empty">請於左側輸入有效的價格與數量</td></tr>';
+      if (_rangeTableMode !== 'empty') {
+        body.innerHTML = '<tr><td colspan="3" class="empty">請於左側輸入有效的價格與數量</td></tr>';
+        _rangeTableMode = 'empty';
+      }
       elFixedValue.textContent = '-';
       elBe.textContent = '-';
       elCp.textContent = '-';
@@ -860,17 +890,38 @@
       elCpRow.className = 'result-row big ' + (cp >= 0 ? 'profit' : 'loss');
     }
 
-    body.innerHTML = rows.map(r => {
+    // 從 empty 切回 rows 時清空一次;之後同模式內只動 td.textContent / className,不重建 <tr>
+    if (_rangeTableMode !== 'rows') {
+      body.innerHTML = '';
+      _rangeTableMode = 'rows';
+    }
+    // 維持 row 數目:多了刪、少了補 (rangeRowsHalf 切換時才會差)
+    while (body.children.length > rows.length) body.removeChild(body.lastChild);
+    while (body.children.length < rows.length) {
+      const tr = document.createElement('tr');
+      tr.appendChild(document.createElement('td'));
+      tr.appendChild(document.createElement('td'));
+      tr.appendChild(document.createElement('td'));
+      body.appendChild(tr);
+    }
+    rows.forEach((r, i) => {
+      const tr = body.children[i];
       const cls = r.profit > 0 ? 'profit-cell gain' : (r.profit < 0 ? 'profit-cell lose' : 'profit-cell');
       const profitSign = r.profit > 0 ? '+' : '';
-      const rrSign = r.returnRate > 0 ? '+' : '';
+      const rrSign     = r.returnRate > 0 ? '+' : '';
       const profitDp = Math.abs(r.profit - Math.round(r.profit)) > 1e-6 ? 2 : 0;
-      return '<tr class="' + (r.isCenter ? 'center' : '') + '">' +
-        '<td>' + r.price.toFixed(decimals) + '</td>' +
-        '<td class="' + cls + '">' + profitSign + fmtNum(r.profit, profitDp) + '</td>' +
-        '<td class="' + cls + '">' + rrSign + (isFinite(r.returnRate) ? r.returnRate.toFixed(2) : '0.00') + '%</td>' +
-        '</tr>';
-    }).join('');
+      const trCls = r.isCenter ? 'center' : '';
+      if (tr.className !== trCls) tr.className = trCls;
+      const c0 = tr.children[0], c1 = tr.children[1], c2 = tr.children[2];
+      const txt0 = r.price.toFixed(decimals);
+      const txt1 = profitSign + fmtNum(r.profit, profitDp);
+      const txt2 = rrSign + (isFinite(r.returnRate) ? r.returnRate.toFixed(2) : '0.00') + '%';
+      if (c0.textContent !== txt0) c0.textContent = txt0;
+      if (c1.className   !== cls)  c1.className   = cls;
+      if (c1.textContent !== txt1) c1.textContent = txt1;
+      if (c2.className   !== cls)  c2.className   = cls;
+      if (c2.textContent !== txt2) c2.textContent = txt2;
+    });
   }
 
   // ============================================================
@@ -944,25 +995,7 @@
   };
 
   function validateDividendInputs() {
-    Object.entries(DIVIDEND_VALIDATORS).forEach(([id, { type, test, msg }]) => {
-      const el = $(id);
-      if (!el) return;
-      const v = parseFloat(el.value);
-      const valid = isFinite(v) && test(v);
-      const field = el.closest('.field');
-      const errEl = $(id + 'Error');
-      if (valid) {
-        clearFieldError(id, el, field, errEl);
-      } else {
-        if (field) {
-          field.classList.remove(type === 'error' ? 'has-warn' : 'has-error');
-          field.classList.add('has-' + type);
-        }
-        el.setAttribute('aria-invalid', type === 'error' ? 'true' : 'false');
-        el.setAttribute('aria-describedby', id + 'Error');
-        if (errEl) errEl.textContent = msg;
-      }
-    });
+    applyValidators(DIVIDEND_VALIDATORS);
     // 軟警示:現金與股票股利都為 0
     const cash  = parseFloat($('cashDividend').value)  || 0;
     const stock = parseFloat($('stockDividend').value) || 0;
@@ -1022,111 +1055,138 @@
     const taxData = calcDividendTax(dividendIncome, otherIncome);
     const marginalRate = currentMarginalRate(otherIncome + dividendIncome);
 
-    renderDividend({
+    const renderData = {
       prePrice, refPrice, drop,
       cashDividend, stockDividend, totalShares,
       dividendBuyCost, costRed,
       cashIncome, stockAlloc, fill, yieldData,
       dividendIncome, taxData, marginalRate, otherIncome,
+    };
+    renderDividend(renderData);
+    // snapshot 給 buildDividendReportText 用 (renderData + 原始輸入欄位)
+    lastDividendData = Object.assign({}, renderData, {
+      dividendUnit,
+      prePriceInput:        $('prePrice').value,
+      cashDividendInput:    $('cashDividend').value,
+      stockDividendInput:   $('stockDividend').value,
+      dividendSharesInput:  $('dividendShares').value,
     });
-    saveDividendSettings();
+    // 持久化由呼叫端 scheduleSaveDividend 處理 (debounce);doReset/applyMode 路徑改顯式呼叫
+  }
+
+  // 除權息結果區的 DOM 節點 cache (首次 render 時建立)
+  let divDom = null;
+  function ensureDivDom() {
+    if (divDom) return divDom;
+    divDom = {};
+    [
+      'exDivPrice', 'priceDrop',
+      'dividendGross', 'healthInsRow', 'healthInsBasisRow', 'healthInsHelp',
+      'healthInsFee', 'healthInsBasis', 'dividendNet',
+      'stockAllocSection', 'allocatedShares', 'totalSharesAfter', 'wholeFractionShares',
+      'costReductionSection', 'newCostTotal', 'newCostPerShare', 'newCostReduction',
+      'fillGainPct', 'fillTargetPrice',
+      'cashYield', 'stockYieldRow', 'stockYield', 'totalYield',
+      'marginalRateText', 'otherIncomeText', 'taxAddA', 'taxCreditA', 'taxNetA', 'taxNetB',
+      'taxMethodABadge', 'taxMethodBBadge', 'taxMethodA', 'taxMethodB',
+      'dividendSharesTotal',
+    ].forEach(id => { divDom[id] = $(id); });
+    return divDom;
   }
 
   function renderDividend(r) {
+    const d = ensureDivDom();
     // 參考價
     if (r.prePrice > 0 && (r.cashDividend > 0 || r.stockDividend > 0)) {
-      $('exDivPrice').textContent = 'NT$ ' + r.refPrice.toFixed(2);
-      $('priceDrop').textContent  = '-NT$ ' + r.drop.toFixed(2);
+      d.exDivPrice.textContent = 'NT$ ' + r.refPrice.toFixed(2);
+      d.priceDrop.textContent  = '-NT$ ' + r.drop.toFixed(2);
     } else {
-      $('exDivPrice').textContent = '-';
-      $('priceDrop').textContent  = '-';
+      d.exDivPrice.textContent = '-';
+      d.priceDrop.textContent  = '-';
     }
 
     // 現金股利收入
-    $('dividendGross').textContent = fmtMoney(r.cashIncome.gross);
+    d.dividendGross.textContent = fmtMoney(r.cashIncome.gross);
     // 補充保費合併計算:有股票股利時顯示合計給付 sub 行 + 法規說明
     const hasStock = r.cashIncome.stockGross > 0;
     const showFee  = r.cashIncome.healthIns > 0;
-    $('healthInsRow').hidden      = !showFee;
-    $('healthInsBasisRow').hidden = !(hasStock && showFee);
-    $('healthInsHelp').hidden     = !hasStock;
+    d.healthInsRow.hidden      = !showFee;
+    d.healthInsBasisRow.hidden = !(hasStock && showFee);
+    d.healthInsHelp.hidden     = !hasStock;
     if (showFee) {
-      $('healthInsFee').textContent = '-' + fmtMoney(r.cashIncome.healthIns);
+      d.healthInsFee.textContent = '-' + fmtMoney(r.cashIncome.healthIns);
       if (hasStock) {
-        $('healthInsBasis').textContent =
+        d.healthInsBasis.textContent =
           '現金 ' + fmtMoney(r.cashIncome.gross) +
           ' + 股票面額 ' + fmtMoney(r.cashIncome.stockGross) +
           ' = ' + fmtMoney(r.cashIncome.totalGross);
       }
     }
-    $('dividendNet').textContent = fmtMoney(r.cashIncome.net);
+    d.dividendNet.textContent = fmtMoney(r.cashIncome.net);
 
     // 配股 (僅在股票股利 > 0 才顯示)
-    const stockSection = $('stockAllocSection');
     if (r.stockDividend > 0 && r.totalShares > 0) {
-      stockSection.hidden = false;
-      $('allocatedShares').textContent  = fmtNum(r.stockAlloc.allocated, 2) + ' 股';
-      $('totalSharesAfter').textContent = fmtNum(r.stockAlloc.totalShares, 2) + ' 股';
-      $('wholeFractionShares').textContent =
+      d.stockAllocSection.hidden = false;
+      d.allocatedShares.textContent  = fmtNum(r.stockAlloc.allocated, 2) + ' 股';
+      d.totalSharesAfter.textContent = fmtNum(r.stockAlloc.totalShares, 2) + ' 股';
+      d.wholeFractionShares.textContent =
         fmtNum(r.stockAlloc.wholeShares, 0) + ' 整股 + ' +
         r.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股';
     } else {
-      stockSection.hidden = true;
+      d.stockAllocSection.hidden = true;
     }
 
     // 成本降低 (僅在使用者填寫買進成本 > 0 且有持股時顯示)
-    const costSection = $('costReductionSection');
     if (r.dividendBuyCost > 0 && r.totalShares > 0 && (r.cashDividend > 0 || r.stockDividend > 0)) {
-      costSection.hidden = false;
-      $('newCostTotal').textContent     = fmtMoney(r.costRed.newCostTotal);
-      $('newCostPerShare').textContent  = 'NT$ ' + r.costRed.newCostPerShare.toFixed(2);
-      $('newCostReduction').textContent =
+      d.costReductionSection.hidden = false;
+      d.newCostTotal.textContent     = fmtMoney(r.costRed.newCostTotal);
+      d.newCostPerShare.textContent  = 'NT$ ' + r.costRed.newCostPerShare.toFixed(2);
+      d.newCostReduction.textContent =
         '降 NT$ ' + r.costRed.costReduction.toFixed(2) + '/股 (' +
         r.costRed.costReductionPct.toFixed(2) + '%)';
     } else {
-      costSection.hidden = true;
+      d.costReductionSection.hidden = true;
     }
 
     // 填權息
     if (r.refPrice > 0 && r.prePrice > 0) {
-      $('fillGainPct').textContent      = r.fill.gainPct.toFixed(2) + '%';
-      $('fillTargetPrice').textContent  = 'NT$ ' + r.fill.targetPrice.toFixed(2);
+      d.fillGainPct.textContent      = r.fill.gainPct.toFixed(2) + '%';
+      d.fillTargetPrice.textContent  = 'NT$ ' + r.fill.targetPrice.toFixed(2);
     } else {
-      $('fillGainPct').textContent      = '-';
-      $('fillTargetPrice').textContent  = '-';
+      d.fillGainPct.textContent      = '-';
+      d.fillTargetPrice.textContent  = '-';
     }
 
     // 殖利率
-    $('cashYield').textContent = r.yieldData.cash.toFixed(2) + '%';
-    const stockYieldRow = $('stockYieldRow');
+    d.cashYield.textContent = r.yieldData.cash.toFixed(2) + '%';
     if (r.stockDividend > 0) {
-      stockYieldRow.hidden = false;
-      $('stockYield').textContent = r.yieldData.stock.toFixed(2) + '%';
+      d.stockYieldRow.hidden = false;
+      d.stockYield.textContent = r.yieldData.stock.toFixed(2) + '%';
     } else {
-      stockYieldRow.hidden = true;
+      d.stockYieldRow.hidden = true;
     }
-    $('totalYield').textContent = r.yieldData.total.toFixed(2) + '%';
+    d.totalYield.textContent = r.yieldData.total.toFixed(2) + '%';
 
     // 股利所得稅
-    $('marginalRateText').textContent = (r.marginalRate * 100).toFixed(0) + '%';
-    $('otherIncomeText').textContent  = Math.round(r.otherIncome).toLocaleString('en-US');
-    $('taxAddA').textContent    = fmtMoney(r.taxData.methodA.additionalTax);
-    $('taxCreditA').textContent = '-' + fmtMoney(r.taxData.methodA.credit);
+    d.marginalRateText.textContent = (r.marginalRate * 100).toFixed(0) + '%';
+    d.otherIncomeText.textContent  = Math.round(r.otherIncome).toLocaleString('en-US');
+    d.taxAddA.textContent    = fmtMoney(r.taxData.methodA.additionalTax);
+    d.taxCreditA.textContent = '-' + fmtMoney(r.taxData.methodA.credit);
     const netA = r.taxData.methodA.netTax;
-    $('taxNetA').textContent = netA < -0.5
+    d.taxNetA.textContent = netA < -0.5
       ? '退稅 ' + fmtMoney(Math.abs(netA))
       : fmtMoney(netA);
-    $('taxNetB').textContent = fmtMoney(r.taxData.methodB.netTax);
+    d.taxNetB.textContent = fmtMoney(r.taxData.methodB.netTax);
 
     // 推薦標籤 (退稅情境也算 A 優)
     const aBetter = r.taxData.better === 'A';
-    $('taxMethodABadge').hidden = !aBetter;
-    $('taxMethodBBadge').hidden = aBetter;
-    $('taxMethodA').classList.toggle('recommended', aBetter);
-    $('taxMethodB').classList.toggle('recommended', !aBetter);
+    d.taxMethodABadge.hidden = !aBetter;
+    d.taxMethodBBadge.hidden = aBetter;
+    d.taxMethodA.classList.toggle('recommended', aBetter);
+    d.taxMethodB.classList.toggle('recommended', !aBetter);
 
     // 合計股數提示
-    $('dividendSharesTotal').textContent = Math.round(r.totalShares).toLocaleString('en-US');
+    d.dividendSharesTotal.textContent = Math.round(r.totalShares).toLocaleString('en-US');
   }
 
   function syncDividendUnitGroup() {
@@ -1177,60 +1237,81 @@
     $('otherIncome').value     = DIVIDEND_DEFAULTS.otherIncome;
     syncDividendUnitGroup();
     calculateDividend();
+    saveDividendSettings();   // 與 trade 的 doReset 對稱:預設值也寫回 storage
     toast('已重置為預設值');
   }
 
   function buildDividendReportText() {
-    const unitLabel = dividendUnit === 'lot' ? '張' : '股';
+    const d = lastDividendData;
+    if (!d) return '(尚未計算)';
+    const unitLabel = d.dividendUnit === 'lot' ? '張' : '股';
+    const hasRef    = d.prePrice > 0 && (d.cashDividend > 0 || d.stockDividend > 0);
+    const refPriceStr = hasRef ? 'NT$ ' + d.refPrice.toFixed(2) : '-';
+    const dropStr     = hasRef ? '-NT$ ' + d.drop.toFixed(2)    : '-';
+    const fillGainStr   = hasRef ? d.fill.gainPct.toFixed(2) + '%'    : '-';
+    const fillTargetStr = hasRef ? 'NT$ ' + d.fill.targetPrice.toFixed(2) : '-';
+    const showStockYield = d.stockDividend > 0;
+    const showFee        = d.cashIncome.healthIns > 0;
+    const hasStockGross  = d.cashIncome.stockGross > 0;
+    const showStockAlloc = d.stockDividend > 0 && d.totalShares > 0;
+    const showCostRed    = d.dividendBuyCost > 0 && d.totalShares > 0 && (d.cashDividend > 0 || d.stockDividend > 0);
+
     const lines = [
       '台股除權息計算結果',
       '─────────────',
-      '除權息前股價: ' + $('prePrice').value + ' 元',
-      '現金股利: ' + $('cashDividend').value + ' 元/股',
-      '股票股利: ' + $('stockDividend').value + ' 元/股',
-      '持股: ' + $('dividendShares').value + ' ' + unitLabel + ' (= ' + $('dividendSharesTotal').textContent + ' 股)',
+      '除權息前股價: ' + d.prePriceInput + ' 元',
+      '現金股利: ' + d.cashDividendInput + ' 元/股',
+      '股票股利: ' + d.stockDividendInput + ' 元/股',
+      '持股: ' + d.dividendSharesInput + ' ' + unitLabel +
+        ' (= ' + Math.round(d.totalShares).toLocaleString('en-US') + ' 股)',
       '─────────────',
-      '除權息參考價: ' + $('exDivPrice').textContent,
-      '股價蒸發: ' + $('priceDrop').textContent,
-      '填權息所需漲幅: ' + $('fillGainPct').textContent,
-      '填權息目標價: ' + $('fillTargetPrice').textContent,
-      '現金殖利率: ' + $('cashYield').textContent,
+      '除權息參考價: ' + refPriceStr,
+      '股價蒸發: ' + dropStr,
+      '填權息所需漲幅: ' + fillGainStr,
+      '填權息目標價: ' + fillTargetStr,
+      '現金殖利率: ' + d.yieldData.cash.toFixed(2) + '%',
     ];
-    if (!$('stockYieldRow').hidden) {
-      lines.push('股票殖利率: ' + $('stockYield').textContent);
+    if (showStockYield) {
+      lines.push('股票殖利率: ' + d.yieldData.stock.toFixed(2) + '%');
     }
     lines.push(
-      '總殖利率: ' + $('totalYield').textContent,
+      '總殖利率: ' + d.yieldData.total.toFixed(2) + '%',
       '─────────────',
-      '現金股利收入: ' + $('dividendGross').textContent,
+      '現金股利收入: ' + fmtMoney(d.cashIncome.gross),
     );
-    if (!$('healthInsRow').hidden) {
-      lines.push('二代健保補充保費: ' + $('healthInsFee').textContent);
-      if (!$('healthInsBasisRow').hidden) {
-        lines.push('  合計給付: ' + $('healthInsBasis').textContent);
+    if (showFee) {
+      lines.push('二代健保補充保費: -' + fmtMoney(d.cashIncome.healthIns));
+      if (hasStockGross) {
+        lines.push('  合計給付: 現金 ' + fmtMoney(d.cashIncome.gross) +
+          ' + 股票面額 ' + fmtMoney(d.cashIncome.stockGross) +
+          ' = ' + fmtMoney(d.cashIncome.totalGross));
       }
     }
-    lines.push('實領現金: ' + $('dividendNet').textContent);
-    if (!$('stockAllocSection').hidden) {
+    lines.push('實領現金: ' + fmtMoney(d.cashIncome.net));
+    if (showStockAlloc) {
       lines.push(
-        '配股數: ' + $('allocatedShares').textContent,
-        '配股後總股數: ' + $('totalSharesAfter').textContent,
-        '整股/畸零股: ' + $('wholeFractionShares').textContent,
+        '配股數: ' + fmtNum(d.stockAlloc.allocated, 2) + ' 股',
+        '配股後總股數: ' + fmtNum(d.stockAlloc.totalShares, 2) + ' 股',
+        '整股/畸零股: ' + fmtNum(d.stockAlloc.wholeShares, 0) +
+          ' 整股 + ' + d.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股',
       );
     }
-    if (!$('costReductionSection').hidden) {
+    if (showCostRed) {
       lines.push(
-        '除權息後總持有成本: ' + $('newCostTotal').textContent +
-          ' (每股 ' + $('newCostPerShare').textContent +
-          ',' + $('newCostReduction').textContent + ')',
+        '除權息後總持有成本: ' + fmtMoney(d.costRed.newCostTotal) +
+          ' (每股 NT$ ' + d.costRed.newCostPerShare.toFixed(2) +
+          ',降 NT$ ' + d.costRed.costReduction.toFixed(2) +
+          '/股 (' + d.costRed.costReductionPct.toFixed(2) + '%))',
       );
     }
+    const netA = d.taxData.methodA.netTax;
+    const netAStr = netA < -0.5 ? '退稅 ' + fmtMoney(Math.abs(netA)) : fmtMoney(netA);
     lines.push(
       '─────────────',
-      '邊際稅率: ' + $('marginalRateText').textContent,
-      'A. 合併課稅 (8.5% 抵減) 淨稅: ' + $('taxNetA').textContent,
-      'B. 分離課稅 (28%) 淨稅: ' + $('taxNetB').textContent,
-      '推薦方案: ' + (!$('taxMethodABadge').hidden ? 'A 合併課稅' : 'B 分離課稅'),
+      '邊際稅率: ' + (d.marginalRate * 100).toFixed(0) + '%',
+      'A. 合併課稅 (8.5% 抵減) 淨稅: ' + netAStr,
+      'B. 分離課稅 (28%) 淨稅: ' + fmtMoney(d.taxData.methodB.netTax),
+      '推薦方案: ' + (d.taxData.better === 'A' ? 'A 合併課稅' : 'B 分離課稅'),
     );
     return lines.join('\n');
   }
@@ -1338,46 +1419,53 @@
   }
 
   function buildReportText() {
-    const isShort = direction === 'short';
-    const unitLabel = unit === 'lot' ? '張' : '股';
-    const buyLabel = isShort ? '回補' : '買進';
+    const d = lastTradeData;
+    if (!d) return '(尚未計算)';
+    const isShort = d.direction === 'short';
+    const unitLabel = d.unit === 'lot' ? '張' : '股';
+    const buyLabel  = isShort ? '回補' : '買進';
+    const sellLabel = isShort ? '放空價格 (元)' : '賣出價格 (元)';
+    const breakevenLabel = isShort ? '損益兩平回補價' : '損益兩平賣價';
+    const sharePrice = px => 'NT$ ' + px.toFixed(2);
+    const profitSign = n => (n > 0 ? '+' : '') + fmtMoney(n);
+    const rrSign     = r => (r > 0 ? '+' : '') + (isFinite(r) ? r.toFixed(2) : '0.00') + '%';
     const lines = [
       '台股交易計算結果',
       '─────────────',
       '方向: ' + (isShort ? '做空 (融券)' : '做多'),
-      buyLabel + '列表 (共 ' + buyEntries.length + ' 筆):',
+      buyLabel + '列表 (共 ' + d.buyEntries.length + ' 筆):',
     ];
-    buyEntries.forEach((e, i) => {
+    d.buyEntries.forEach((e, i) => {
       const num = ENTRY_NUMERALS[i] || ('(' + (i + 1) + ')');
       lines.push('  ' + num + ' ' + e.price + ' 元 × ' + e.qty + ' ' + unitLabel);
     });
     lines.push(
-      $('sellPriceLabel').textContent + ': ' + $('sellPrice').value + ' 元',
-      '證交稅率: ' + ($('productTypeGroup').querySelector('button.active')?.textContent || productType),
-      '手續費折扣: ' + formatDiscount(parseFloat($('discount').value)) + ' (' + $('discount').value + ')',
+      sellLabel + ': ' + d.sellPriceInput + ' 元',
+      '證交稅率: ' + (PRODUCT_LABELS[d.productType] || d.productType),
+      '手續費折扣: ' + formatDiscount(d.discount) + ' (' + d.discountInput + ')',
     );
     if (isShort) {
-      lines.push('借券: 年化 ' + $('borrowRate').value + '% × ' + $('borrowDays').value + ' 天');
+      lines.push('借券: 年化 ' + d.borrowRateInput + '% × ' + d.borrowDaysInput + ' 天');
     }
     lines.push(
-      '※' + $('breakevenLabel').textContent + ': ' + $('breakeven').textContent,
+      '※' + breakevenLabel + ': ' + (d.breakeven > 0 ? sharePrice(d.breakeven) : '-'),
       '─────────────',
-      '買進金額: ' + $('buyAmount').textContent,
-      '買進手續費: ' + $('buyFee').textContent,
-      '買進總成本: ' + $('totalCost').textContent,
-      '每股實際成本: ' + $('costPerShare').textContent,
-      '賣出金額: ' + $('sellAmount').textContent,
-      '賣出手續費: ' + $('sellFee').textContent,
-      '證交稅: ' + $('tax').textContent,
+      '買進金額: ' + fmtMoney(d.buyAmount),
+      '買進手續費: ' + fmtMoney(d.buyFee),
+      '買進總成本: ' + fmtMoney(d.totalCost),
+      '每股實際成本: ' + (d.shares > 0 ? sharePrice(d.avgCost) : '-'),
+      '賣出金額: ' + fmtMoney(d.sellAmount),
+      '賣出手續費: ' + fmtMoney(d.sellFee),
+      '證交稅: ' + fmtMoney(d.tax),
     );
-    if (isShort) lines.push('借券費: ' + $('borrowFee').textContent);
+    if (isShort) lines.push('借券費: ' + fmtMoney(d.borrowFee));
     lines.push(
-      '賣出淨收入: ' + $('netSell').textContent,
-      '每股實際淨收: ' + $('netPerShare').textContent,
+      '賣出淨收入: ' + fmtMoney(d.netSell),
+      '每股實際淨收: ' + (d.shares > 0 ? sharePrice(d.netPerShare) : '-'),
       '─────────────',
-      '損益: ' + $('profit').textContent,
-      '報酬率: ' + $('returnRate').textContent,
-      '總交易成本: ' + $('totalFees').textContent,
+      '損益: ' + profitSign(d.profit),
+      '報酬率: ' + rrSign(d.returnRate),
+      '總交易成本: ' + fmtMoney(d.totalFees),
     );
     return lines.join('\n');
   }
@@ -1419,13 +1507,8 @@
   // ============================================================
   function saveSettings() {
     try {
-      const data = { buyEntries };   // 陣列獨立 serialize
-      PERSIST_KEYS.forEach(k => {
-        if (k === 'direction') data[k] = direction;
-        else if (k === 'unit') data[k] = unit;
-        else if (k === 'productType') data[k] = productType;
-        else data[k] = $(k).value;
-      });
+      const data = { buyEntries, direction, unit, productType };
+      PERSIST_DOM_KEYS.forEach(k => { if ($(k)) data[k] = $(k).value; });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (_) {}
   }
@@ -1437,8 +1520,8 @@
       if (data.direction === 'long' || data.direction === 'short') direction = data.direction;
       if (data.unit === 'lot' || data.unit === 'share') unit = data.unit;
       if (data.productType && TAX_RATES[data.productType] !== undefined) productType = data.productType;
-      ['sellPrice', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'].forEach(k => {
-        if (data[k] !== undefined && data[k] !== null && data[k] !== '') $(k).value = data[k];
+      PERSIST_DOM_KEYS.forEach(k => {
+        if (data[k] !== undefined && data[k] !== null && data[k] !== '' && $(k)) $(k).value = data[k];
       });
       // buyEntries 新 schema (含舊 buyPrice + quantity 自動 migrate)
       if (Array.isArray(data.buyEntries) && data.buyEntries.length > 0) {
@@ -1461,13 +1544,43 @@
   }
 
   // ============================================================
+  // 節流:calculate 用 rAF 合併同一 frame 內多次呼叫;localStorage 寫入用 300ms timer。
+  // pagehide / visibilitychange 強制 flush,避免關分頁時丟最後輸入。
+  // ============================================================
+  let _calcRaf = 0, _calcDivRaf = 0, _saveTimer = 0, _saveDivTimer = 0;
+  function scheduleCalculate() {
+    if (_calcRaf) return;
+    _calcRaf = requestAnimationFrame(() => { _calcRaf = 0; calculate(); });
+  }
+  function scheduleCalculateDividend() {
+    if (_calcDivRaf) return;
+    _calcDivRaf = requestAnimationFrame(() => { _calcDivRaf = 0; calculateDividend(); });
+  }
+  function scheduleSave() {
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => { _saveTimer = 0; saveSettings(); }, 300);
+  }
+  function scheduleSaveDividend() {
+    clearTimeout(_saveDivTimer);
+    _saveDivTimer = setTimeout(() => { _saveDivTimer = 0; saveDividendSettings(); }, 300);
+  }
+  function flushPendingSaves() {
+    if (_saveTimer)    { clearTimeout(_saveTimer);    _saveTimer = 0;    saveSettings(); }
+    if (_saveDivTimer) { clearTimeout(_saveDivTimer); _saveDivTimer = 0; saveDividendSettings(); }
+  }
+  window.addEventListener('pagehide', flushPendingSaves);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingSaves();
+  });
+
+  // ============================================================
   // 事件綁定
   // ============================================================
   ['sellPrice', 'discount', 'minFee', 'borrowRate', 'borrowDays'].forEach(id => {
-    $(id).addEventListener('input', () => { calculate(); saveSettings(); });
-    $(id).addEventListener('change', () => { calculate(); saveSettings(); });
+    $(id).addEventListener('input',  () => { scheduleCalculate(); scheduleSave(); });
+    $(id).addEventListener('change', () => { scheduleCalculate(); scheduleSave(); });
   });
-  $('targetReturn').addEventListener('input', () => { saveSettings(); validateInputs(); });
+  $('targetReturn').addEventListener('input', () => { scheduleSave(); validateInputs(); });
 
   // 買進列表 event delegation (input 改值 + 刪除按鈕)
   $('buyList').addEventListener('input', e => {
@@ -1489,8 +1602,8 @@
     } else if (el.classList.contains('buy-entry-qty')) {
       buyEntries[idx].qty = parseFloat(el.value) || 0;
     }
-    calculate();
-    saveSettings();
+    scheduleCalculate();
+    scheduleSave();
   });
   $('buyList').addEventListener('click', e => {
     const removeBtn = e.target.closest('.buy-entry-remove');
@@ -1536,6 +1649,15 @@
     saveSettings();
   });
   $('discount').addEventListener('input', syncToggleGroups);
+  // discount 在 change (blur / Enter) 把不合法值校正回 1,讓畫面與計算同步
+  // (此 listener 同步寫回 value,下一 frame scheduleCalculate 讀到已校正值)
+  $('discount').addEventListener('change', () => {
+    const v = parseFloat($('discount').value);
+    if (!isFinite(v) || v <= 0 || v > 1) {
+      $('discount').value = '1';
+      syncToggleGroups();
+    }
+  });
 
   $('snapBreakeven').addEventListener('click', snapToBreakeven);
   $('snapTarget').addEventListener('click', snapToTarget);
@@ -1640,16 +1762,17 @@
    'healthRate', 'healthThreshold', 'otherIncome'].forEach(id => {
     const el = $(id);
     if (!el) return;
-    el.addEventListener('input',  () => { calculateDividend(); });
-    el.addEventListener('change', () => { calculateDividend(); });
+    el.addEventListener('input',  () => { scheduleCalculateDividend(); scheduleSaveDividend(); });
+    el.addEventListener('change', () => { scheduleCalculateDividend(); scheduleSaveDividend(); });
   });
 
-  // 除權息持股單位切換
+  // 除權息持股單位切換 (button click,低頻,直接呼叫)
   $('dividendUnitGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
     dividendUnit = e.target.dataset.dividendUnit;
     syncDividendUnitGroup();
     calculateDividend();
+    saveDividendSettings();
   });
 
   // 區間試算範圍切換

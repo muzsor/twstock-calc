@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-06-02
+
+效能、安全與程式碼品質的小幅優化，沒有功能變更。
+
+### Changed
+- **`renderRangeTable` 改為 cell-level 增量更新**：新增 `_rangeTableMode` 狀態機（`'empty'` / `'rows'`），同模式內保留 `<tr>` / `<td>` 節點，只動 `textContent` 與 `className`；跨模式或 ±N 切換時才動 DOM 結構。原本每次 input 都把整段 `<tbody>` innerHTML 重建。
+- **`calculate()` 加 active tab 保護**：`renderRangeTable()` 只在「區間試算」分頁時呼叫，切回 range 分頁由 `switchTab` 觸發一次。「詳細試算」分頁下省下整段範圍表重建。
+- **input 事件加 rAF 合併 + localStorage 寫入 300ms throttle**：`scheduleCalculate` / `scheduleSave` 用 `requestAnimationFrame` 與 timer 把同一 frame / 連續打字內的多次呼叫合併；`pagehide` 與 `visibilitychange → hidden` 強制 flush，避免關分頁時丟最後輸入。除權息模式同樣處理。
+- **`buildReportText` / `buildDividendReportText` 改從結構化 snapshot 讀**：`calculate()` / `calculateDividend()` 結束時把所有原始值存進 `lastTradeData` / `lastDividendData`，報告函數從 snapshot 用 `fmtMoney` 等 helper 重組，不再反讀 DOM `textContent`。
+- **`PERSIST_KEYS` 拆為 `PERSIST_DOM_KEYS`**：原本一份混合「DOM 欄位 + JS 變數」的清單，`loadSettings()` 內另有一份 inline 寫死的同類清單。改為 DOM 欄位收斂到 `PERSIST_DOM_KEYS` 一份，JS 變數（direction / unit / productType）在 save/load 顯式處理。
+- **抽出 `applyValidators(validators, skipPredicate)` helper**：`validateInputs` 與 `validateDividendInputs` 共用同一套錯誤套用邏輯；trade 用 `skipPredicate` 處理借券欄做多時跳過。
+- **`renderDividend` 把 33 個輸出節點 cache 到 `divDom` 物件**，後續用 `d.xxx` 取代 `$('xxx')`。
+- Service Worker `cache.put` 加 `.catch(() => {})`，配額滿 / 私密模式等失敗無聲略過。
+
+### Security
+- **加 CSP meta tag**：把 README 宣稱的「零外部請求」承諾從口頭轉成瀏覽器強制執行。鎖死 `default-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'`，`'unsafe-inline'` 只開給 `<head>` FOUC 防止 script 與既有 HTML inline style 屬性。`frame-ancestors 'self'` 保留 tests.html iframe 可載入 index.html。
+
+### Fixed
+- **`calcExDividendPrice` 病態輸入鎖在 0**：`cashDividend > prePrice` 時（例：股價 5、現金股利 10）原本會跑出負參考價，改為 `Math.max(0, ...)`。
+- **`fmtMoney` 整數判斷門檻收緊**：從 `> 1e-6` 改為 `>= 0.005`，與 2dp 顯示行為一致 — 小數部分 < 0.005 時 `toFixed(2)` 已會 round 回整數，不必再顯示 `.00`。
+- **折扣欄位輸入超出範圍時 blur 自動 clamp**：`change` 觸發時，若值 `> 1` / `≤ 0` / NaN，寫回 `1`。原本只在 `readInputs` 內部 clamp，但欄位仍顯示輸入值與紅框，畫面與計算不同步。
+
 ## [1.4.0] — 2026-05-29
 
 ### Added

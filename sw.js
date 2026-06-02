@@ -49,10 +49,10 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(resp => {
-        // 只快取成功的同源回應
+        // 只快取成功的同源回應;配額滿 / 私密模式等失敗無聲略過,不影響回應
         if (resp.ok && resp.type === 'basic') {
           const clone = resp.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
+          caches.open(CACHE).then(c => c.put(e.request, clone)).catch(() => {});
         }
         return resp;
       }).catch(() => cached);  // 網路失敗就回 cache (若有);否則讓瀏覽器顯示原生離線

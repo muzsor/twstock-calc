@@ -1,6 +1,6 @@
 # 📈 台股交易計算機
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.1-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-ready-success.svg)](#%EF%B8%8F-開發)
 
