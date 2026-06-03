@@ -45,8 +45,8 @@
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-light.svg">
-<link rel="stylesheet" href="styles.css?v=1.4.1">
-<script defer src="app.js?v=1.4.1"></script>
+<link rel="stylesheet" href="styles.css?v=1.4.2">
+<script defer src="app.js?v=1.4.2"></script>
 </head>
 <body>
   <div class="container">
@@ -105,7 +105,7 @@
         <h2>
           交易條件
           <div class="popover-host" style="margin-left:auto;">
-            <button type="button" class="gear-btn" id="condGearBtn" aria-label="進階設定:手續費折扣與最低手續費" aria-haspopup="dialog" aria-expanded="false" aria-controls="condGearPopover">
+            <button type="button" class="gear-btn" id="condGearBtn" title="進階設定:手續費折扣與最低手續費" aria-label="進階設定:手續費折扣與最低手續費" aria-haspopup="dialog" aria-expanded="false" aria-controls="condGearPopover">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -227,7 +227,7 @@
             <button type="button" data-tab="range" role="tab" aria-selected="false">區間試算</button>
           </div>
           <div class="popover-host" id="rangeGearHost" hidden>
-            <button type="button" class="gear-btn" id="rangeGearBtn" aria-label="顯示設定" aria-haspopup="dialog" aria-expanded="false" aria-controls="rangeGearPopover">
+            <button type="button" class="gear-btn" id="rangeGearBtn" title="區間試算顯示範圍設定" aria-label="區間試算顯示範圍設定" aria-haspopup="dialog" aria-expanded="false" aria-controls="rangeGearPopover">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -373,7 +373,7 @@
         <h2>
           除權息條件
           <div class="popover-host" style="margin-left:auto;">
-            <button type="button" class="gear-btn" id="divGearBtn" aria-label="進階設定:健保補充保費與其他綜合所得" aria-haspopup="dialog" aria-expanded="false" aria-controls="divGearPopover">
+            <button type="button" class="gear-btn" id="divGearBtn" title="進階設定:健保補充保費與其他綜合所得" aria-label="進階設定:健保補充保費與其他綜合所得" aria-haspopup="dialog" aria-expanded="false" aria-controls="divGearPopover">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -448,6 +448,7 @@
         <div class="field">
           <label for="dividendBuyCost">我的買進成本(每股,選填)</label>
           <input type="number" id="dividendBuyCost" value="0" step="0.01" min="0" inputmode="decimal">
+          <div class="help" id="dividendBuyCostHelp" hidden>合計持有成本 <strong id="dividendBuyCostTotal">0</strong> 元</div>
           <div class="help">填寫每股實際買進均價,試算除權息後成本降低多少;0 或留空則不顯示</div>
           <div class="field-error" id="dividendBuyCostError" role="alert"></div>
         </div>
@@ -463,7 +464,7 @@
             <span class="value" id="exDivPrice">-</span>
           </div>
           <div class="result-row sub">
-            <span class="label">└ 股價蒸發</span>
+            <span class="label">└ 除權息調降</span>
             <span class="value" id="priceDrop">-</span>
           </div>
         </div>
@@ -622,7 +623,11 @@
     <div class="confirm-dialog-body">
       <div class="confirm-dialog-title" id="confirmDialogTitle">確定要重置嗎?</div>
       <div class="confirm-dialog-text" id="confirmDialogText">
-        將清除所有輸入欄位、商品類型、手續費設定與區間範圍，並還原為預設值。此動作無法復原。
+        將清除進階設定(手續費設定)、商品類型、交易方向、所有輸入欄位與區間試算的範圍顯示設定，並還原為預設值。
+      </div>
+      <div class="confirm-dialog-note">
+        <span id="confirmDialogNoteInfo">除權息試算的資料不受影響。</span>
+        <strong class="confirm-dialog-warn">此動作無法復原。</strong>
       </div>
       <div class="confirm-dialog-actions">
         <button type="button" class="btn-action" id="confirmDialogCancel">取消</button>

@@ -1,6 +1,6 @@
 # 📈 台股交易計算機
 
-[![Version](https://img.shields.io/badge/version-1.4.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.2-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PWA](https://img.shields.io/badge/PWA-ready-success.svg)](#%EF%B8%8F-開發)
 
@@ -97,7 +97,7 @@
 - 除權息前股價
 - 現金股利、股票股利(各自可填 0，純除權或純除息都支援)
 - 持股數量(獨立的「張/股」單位，不跟交易模式共用)
-- **我的買進成本(每股,選填)** — 填了才會試算除權息後成本如何下降
+- **我的買進成本(每股,選填)** — 填了才會試算除權息後成本如何下降;輸入欄位下方即時顯示「合計持有成本 NT$ XXX 元」
 
 齒輪 popover 內的進階設定：
 
@@ -111,7 +111,7 @@
 
 **股價變化**
 
-- **除權息參考價** + 股價蒸發金額
+- **除權息參考價** + 除權息調降金額
 - **填權息**:所需漲幅 + 目標價(= 除權息前股價)
 - **殖利率**:現金 / 股票 / 合計(以面額計)
 

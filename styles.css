@@ -1216,6 +1216,19 @@
     color: var(--text-secondary);
     line-height: 1.6;
   }
+  .confirm-dialog-note {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-dashed);
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .confirm-dialog-warn {
+    margin-left: 4px;
+    font-weight: 700;
+    color: var(--err-color);
+  }
   .confirm-dialog-actions {
     display: flex;
     justify-content: flex-end;

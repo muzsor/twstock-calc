@@ -5,7 +5,7 @@
 // (設定 data-theme 與 data-app-mode),不能搬到此外部檔。
 
   const $ = id => document.getElementById(id);
-  const APP_VERSION = '1.4.1';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
+  const APP_VERSION = '1.4.2';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const DIVIDEND_STORAGE_KEY = 'twStockCalc.dividend.v1';   // 除權息獨立持久化
   const APP_MODE_KEY = 'twStockCalc.appMode';                // 頂層模式
@@ -1089,7 +1089,7 @@
       'cashYield', 'stockYieldRow', 'stockYield', 'totalYield',
       'marginalRateText', 'otherIncomeText', 'taxAddA', 'taxCreditA', 'taxNetA', 'taxNetB',
       'taxMethodABadge', 'taxMethodBBadge', 'taxMethodA', 'taxMethodB',
-      'dividendSharesTotal',
+      'dividendSharesTotal', 'dividendBuyCostHelp', 'dividendBuyCostTotal',
     ].forEach(id => { divDom[id] = $(id); });
     return divDom;
   }
@@ -1187,6 +1187,14 @@
 
     // 合計股數提示
     d.dividendSharesTotal.textContent = Math.round(r.totalShares).toLocaleString('en-US');
+
+    // 合計持有成本提示 (有設定買進成本才顯示)
+    const showBuyCostTotal = r.dividendBuyCost > 0 && r.totalShares > 0;
+    d.dividendBuyCostHelp.hidden = !showBuyCostTotal;
+    if (showBuyCostTotal) {
+      d.dividendBuyCostTotal.textContent =
+        Math.round(r.dividendBuyCost * r.totalShares).toLocaleString('en-US');
+    }
   }
 
   function syncDividendUnitGroup() {
@@ -1264,13 +1272,18 @@
       '股票股利: ' + d.stockDividendInput + ' 元/股',
       '持股: ' + d.dividendSharesInput + ' ' + unitLabel +
         ' (= ' + Math.round(d.totalShares).toLocaleString('en-US') + ' 股)',
+    ];
+    if (d.dividendBuyCost > 0 && d.totalShares > 0) {
+      lines.push('持有成本: ' + fmtMoney(d.dividendBuyCost * d.totalShares) + ' 元');
+    }
+    lines.push(
       '─────────────',
       '除權息參考價: ' + refPriceStr,
-      '股價蒸發: ' + dropStr,
+      '除權息調降: ' + dropStr,
       '填權息所需漲幅: ' + fillGainStr,
       '填權息目標價: ' + fillTargetStr,
       '現金殖利率: ' + d.yieldData.cash.toFixed(2) + '%',
-    ];
+    );
     if (showStockYield) {
       lines.push('股票殖利率: ' + d.yieldData.stock.toFixed(2) + '%');
     }
@@ -1282,9 +1295,9 @@
     if (showFee) {
       lines.push('二代健保補充保費: -' + fmtMoney(d.cashIncome.healthIns));
       if (hasStockGross) {
-        lines.push('  合計給付: 現金 ' + fmtMoney(d.cashIncome.gross) +
+        lines.push('  (合計給付: 現金 ' + fmtMoney(d.cashIncome.gross) +
           ' + 股票面額 ' + fmtMoney(d.cashIncome.stockGross) +
-          ' = ' + fmtMoney(d.cashIncome.totalGross));
+          ' = ' + fmtMoney(d.cashIncome.totalGross) + ')');
       }
     }
     lines.push('實領現金: ' + fmtMoney(d.cashIncome.net));
@@ -1292,14 +1305,14 @@
       lines.push(
         '配股數: ' + fmtNum(d.stockAlloc.allocated, 2) + ' 股',
         '配股後總股數: ' + fmtNum(d.stockAlloc.totalShares, 2) + ' 股',
-        '整股/畸零股: ' + fmtNum(d.stockAlloc.wholeShares, 0) +
-          ' 整股 + ' + d.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股',
+        '  (整股/畸零股: ' + fmtNum(d.stockAlloc.wholeShares, 0) +
+          ' 整股 + ' + d.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股)',
       );
     }
     if (showCostRed) {
       lines.push(
-        '除權息後總持有成本: ' + fmtMoney(d.costRed.newCostTotal) +
-          ' (每股 NT$ ' + d.costRed.newCostPerShare.toFixed(2) +
+        '除權息後總持有成本: ' + fmtMoney(d.costRed.newCostTotal),
+          '  (每股 NT$ ' + d.costRed.newCostPerShare.toFixed(2) +
           ',降 NT$ ' + d.costRed.costReduction.toFixed(2) +
           '/股 (' + d.costRed.costReductionPct.toFixed(2) + '%))',
       );
@@ -1410,10 +1423,21 @@
   }
   // 重置先跳確認 dialog;不支援 <dialog> 時 fallback 到 confirm()
   function showResetConfirm() {
+    const isDividend = appMode === 'dividend';
+    const mainText = isDividend
+      ? '將清除進階設定(健保費率、起徵點、綜合所得淨額)、股價、股利、持股數量與買進成本，並還原為預設值。'
+      : '將清除進階設定(手續費設定)、商品類型、交易方向、所有輸入欄位與區間試算的範圍顯示設定，並還原為預設值。';
+    const infoText = isDividend
+      ? '交易試算的資料不受影響。'
+      : '除權息試算的資料不受影響。';
+    const textEl = $('confirmDialogText');
+    const infoEl = $('confirmDialogNoteInfo');
+    if (textEl) textEl.textContent = mainText;
+    if (infoEl) infoEl.textContent = infoText;
     const dlg = $('confirmDialog');
     if (dlg && typeof dlg.showModal === 'function') {
       dlg.showModal();
-    } else if (window.confirm('將清除所有輸入並還原為預設值，確定要繼續嗎?')) {
+    } else if (window.confirm(mainText + ' ' + infoText + ' 此動作無法復原。')) {
       doReset();
     }
   }
