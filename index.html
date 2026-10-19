@@ -2,12 +2,14 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="台股交易計算機 — 試算手續費、證交稅、借券費與實際損益。支援做多/做空、零股、ETF、現股當沖。純前端、零追蹤。">
+<!-- viewport-fit=cover:讓 env(safe-area-inset-*) 生效 (iPhone 動態島 / 主畫面指示條) -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="台股交易計算機 — 試算手續費、證交稅、借券費與實際損益，以及除權息、二代健保與股利所得稅。支援做多/做空、零股、ETF、現股當沖。純前端、零追蹤。">
 <meta name="theme-color" content="#000000">
 <meta name="color-scheme" content="light dark">
-<!-- CSP 鎖死「零外部請求」;data: 給 inline favicon SVG;'unsafe-inline' 保留給 head FOUC script 與既有 style 屬性 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'none'">
+<!-- CSP 鎖死「零外部請求」;data: 給 inline favicon SVG;'unsafe-inline' 保留給 head FOUC script 與既有 style 屬性
+     (frame-ancestors 只能由 HTTP header 設定,寫在 meta 會被瀏覽器忽略並報錯,故不放) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>台股交易計算機</title>
 <script>
   // 早於 <style> 套用主題與模式,避免初次載入閃光 (FOUC) 與 layout 切換閃爍
@@ -36,17 +38,24 @@
 <!-- Open Graph / 社群分享 -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="台股交易計算機">
-<meta property="og:description" content="試算手續費、證交稅、借券費與實際損益。支援做多/做空、零股、ETF、現股當沖。純前端、零追蹤。">
+<meta property="og:description" content="試算手續費、證交稅、借券費與實際損益，以及除權息、二代健保與股利所得稅。純前端、零追蹤。">
 <meta property="og:locale" content="zh_TW">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="台股交易計算機">
-<meta name="twitter:description" content="試算手續費、證交稅、借券費與實際損益。">
+<meta name="twitter:description" content="試算手續費、證交稅、借券費與實際損益，以及除權息與股利所得稅。">
 <link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23111' rx='6'/><rect x='6' y='9' width='8' height='14' fill='%23d4302a'/><rect x='18' y='12' width='8' height='11' fill='%231f8f4f'/></svg>">
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icons/icon-light.svg">
-<link rel="stylesheet" href="styles.css?v=1.4.2">
-<script defer src="app.js?v=1.4.2"></script>
+<!-- iOS 不支援 SVG 的 apple-touch-icon,需 180×180 PNG (滿版不透明,iOS 自己套圓角)
+     深色版由 app.js 依系統深淺色切換 href;iOS 在「加入主畫面」當下讀取,加入後不會自動跟著變 -->
+<link rel="apple-touch-icon" id="appleTouchIcon" sizes="180x180" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="台股計算機">
+<!-- default:狀態列不透明,內容從狀態列 / 動態島下方開始,不會被遮住 -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="styles.css?v=1.5.0">
+<script defer src="app.js?v=1.5.0"></script>
 </head>
 <body>
   <div class="container">
@@ -61,7 +70,7 @@
         <button type="button" data-mode="dividend" aria-pressed="false">除權息試算</button>
       </div>
       <div class="action-bar-tools">
-        <button type="button" id="themeBtn" class="theme-cycle-btn" data-current-theme="auto" aria-label="切換主題(目前:跟隨系統)" title="主題">
+        <button type="button" id="themeBtn" class="theme-cycle-btn" data-current-theme="auto" aria-label="切換主題（目前：跟隨系統）" title="主題">
           <svg class="theme-icon" data-icon="auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
@@ -83,19 +92,25 @@
           </svg>
         </button>
         <span class="divider" aria-hidden="true"></span>
-        <button type="button" id="resetBtn" class="btn-action">
+        <button type="button" id="resetBtn" class="btn-action" title="重置預設">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="1 4 1 10 7 10"></polyline>
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
           </svg>
-          重置預設
+          <span class="btn-label">重置預設</span>
         </button>
-        <button type="button" id="copyBtn" class="btn-action primary">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <!-- 觸控裝置且支援 Web Share 時,app.js 加上 data-share → 改顯示分享圖示與「分享結果」 -->
+        <button type="button" id="copyBtn" class="btn-action primary" title="複製結果">
+          <svg class="icon-copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
-          複製結果
+          <svg class="icon-share" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+            <polyline points="16 6 12 2 8 6"></polyline>
+            <line x1="12" y1="2" x2="12" y2="15"></line>
+          </svg>
+          <span class="btn-label" id="copyBtnLabel">複製結果</span>
         </button>
       </div>
     </div>
@@ -105,7 +120,7 @@
         <h2>
           交易條件
           <div class="popover-host" style="margin-left:auto;">
-            <button type="button" class="gear-btn" id="condGearBtn" title="進階設定:手續費折扣與最低手續費" aria-label="進階設定:手續費折扣與最低手續費" aria-haspopup="dialog" aria-expanded="false" aria-controls="condGearPopover">
+            <button type="button" class="gear-btn" id="condGearBtn" title="進階設定：手續費折扣與最低手續費" aria-label="進階設定：手續費折扣與最低手續費" aria-haspopup="dialog" aria-expanded="false" aria-controls="condGearPopover">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -127,14 +142,14 @@
                     <button type="button" data-discount="0.38" aria-pressed="false">3.8折</button>
                     <button type="button" data-discount="0.28" aria-pressed="false">2.8折</button>
                   </div>
-                  <div class="help">手續費 = 成交金額 × 0.1425% × 折數，最低 20 元</div>
+                  <div class="help">手續費 = 成交金額 × 0.1425% × 折數；未達最低手續費時，以最低手續費計</div>
                   <div class="field-error" id="discountError" role="alert"></div>
                 </div>
 
                 <div class="field">
                   <label for="minFee">最低手續費 (元)</label>
                   <input type="number" id="minFee" value="20" step="1" min="0" inputmode="numeric">
-                  <div class="help">多數券商最低 20 元，部分電子下單可降至 1 元或不設下限</div>
+                  <div class="help">多數券商每筆最低 20 元；部分電子下單可降至 1 元或不設下限</div>
                   <div class="field-error" id="minFeeError" role="alert"></div>
                 </div>
               </div>
@@ -143,13 +158,14 @@
         </h2>
 
         <div class="field">
-          <label>商品類型 (證交稅率)</label>
-          <div class="btn-group" id="productTypeGroup" role="group" aria-label="商品類型">
-            <button type="button" data-product="stock" class="active" aria-pressed="true">一般 (0.3%)</button>
+          <label>證交稅率</label>
+          <div class="btn-group" id="productTypeGroup" role="group" aria-label="證交稅率">
+            <button type="button" data-product="stock" class="active" aria-pressed="true">一般股票 (0.3%)</button>
             <button type="button" data-product="etf" aria-pressed="false">ETF (0.1%)</button>
-            <button type="button" data-product="daytrade" aria-pressed="false">當沖 (0.15%)</button>
+            <button type="button" data-product="daytrade" aria-pressed="false">現股當沖 (0.15%)</button>
             <button type="button" data-product="none" aria-pressed="false">免稅</button>
           </div>
+          <div class="help field-warn-note" id="daytradeExpiredNote" hidden></div>
         </div>
 
         <div class="field">
@@ -158,19 +174,36 @@
             <button type="button" data-dir="long" class="active" aria-pressed="true">做多 (買低賣高)</button>
             <button type="button" data-dir="short" aria-pressed="false">做空 (賣高買低)</button>
           </div>
+          <div class="help" id="daytradeShortNote" style="display:none">現股當沖的先賣後買不需借券，不收借券費</div>
+        </div>
+
+        <!-- 做空方式:融券 (賣出時一次收借券費) / 借券 SBL (年化費率 × 天數);只在做空時顯示 -->
+        <div class="field" id="shortTypeField" style="display:none">
+          <label>做空方式</label>
+          <div class="btn-group" id="shortTypeGroup" role="group" aria-label="做空方式">
+            <button type="button" data-short-type="margin" class="active" aria-pressed="true">融券</button>
+            <button type="button" data-short-type="sbl" aria-pressed="false">借券 (SBL)</button>
+          </div>
+        </div>
+
+        <div class="field" id="marginFeeField" style="display:none">
+          <label for="marginRate">借券費率 (%)</label>
+          <input type="number" id="marginRate" value="0.08" step="0.01" min="0" inputmode="decimal">
+          <div class="help">融券賣出時一次收取：借券費 = 賣出金額 × 費率，多數券商為 0.08%</div>
+          <div class="field-error" id="marginRateError" role="alert"></div>
         </div>
 
         <div class="row" id="borrowField" style="display:none">
           <div class="field" style="margin-bottom:0">
-            <label for="borrowRate">借券費率 (年化 %)</label>
-            <input type="number" id="borrowRate" value="0.08" step="0.01" min="0" inputmode="decimal">
-            <div class="help">融券放空券商收取，約年化 0.08%~0.1%</div>
+            <label for="borrowRate">年化借券費率 (%)</label>
+            <input type="number" id="borrowRate" value="1" step="0.1" min="0" inputmode="decimal">
+            <div class="help">依個股與市場供需而定，常見約 1%～3%</div>
             <div class="field-error" id="borrowRateError" role="alert"></div>
           </div>
           <div class="field" style="margin-bottom:0">
-            <label for="borrowDays">持有天數</label>
+            <label for="borrowDays">借券天數</label>
             <input type="number" id="borrowDays" value="1" step="1" min="0" inputmode="numeric">
-            <div class="help">借券費 = 成交金額 × 年化率 × 天數 / 365</div>
+            <div class="help">借券費 = 賣出金額 × 年化費率 × 天數 ÷ 365</div>
             <div class="field-error" id="borrowDaysError" role="alert"></div>
           </div>
         </div>
@@ -178,7 +211,7 @@
         <div class="field" id="buyListField">
           <label id="buyListLabel">買進列表<span class="buy-list-count">(<span id="buyListCount">1</span> / 10 筆)</span></label>
           <div id="buyList"><!-- entries 動態渲染 --></div>
-          <button type="button" id="addBuyEntry" class="add-entry-btn">+ 加碼買進</button>
+          <button type="button" id="addBuyEntry" class="add-entry-btn">+ 新增一筆</button>
           <div class="buy-list-summary" id="buyListSummary" hidden>
             總股數 <strong id="buyTotalShares">-</strong> · 平均成本 <strong id="buyAvgCost">-</strong>
           </div>
@@ -186,9 +219,9 @@
         </div>
 
         <div class="field">
-          <label>單位</label>
+          <label>數量單位</label>
           <div class="btn-group" id="unitGroup" role="group" aria-label="數量單位">
-            <button type="button" data-unit="lot" class="active" aria-pressed="true">張 (1000股)</button>
+            <button type="button" data-unit="lot" class="active" aria-pressed="true">張 (1000 股)</button>
             <button type="button" data-unit="share" aria-pressed="false">股 (零股)</button>
           </div>
         </div>
@@ -205,22 +238,24 @@
         </div>
 
         <div class="field field-snap">
-          <label>快捷對齊</label>
+          <label>快速設定價格</label>
           <div class="snap-bar">
-            <button type="button" id="snapBreakeven" class="snap-action">對齊損益兩平</button>
+            <button type="button" id="snapBreakeven" class="snap-action">設為損益兩平價</button>
             <div class="snap-target">
               <span class="snap-label">目標報酬</span>
+              <!-- iOS 小數鍵盤沒有負號,用 ± 按鈕切換正負 -->
+              <button type="button" id="targetReturnSign" class="snap-sign" aria-label="切換目標報酬正負號" title="切換正負號">±</button>
               <input type="number" id="targetReturn" value="5" step="0.5" inputmode="decimal" aria-label="目標報酬率百分比">
               <span class="snap-pct">%</span>
               <button type="button" id="snapTarget">套用</button>
             </div>
           </div>
-          <div class="help">依目標反推賣出價(做多)或回補價(做空)，並對齊到合法升降單位</div>
+          <div class="help">依損益兩平或目標報酬反推賣出價（做多）或回補價（做空），並調整為符合升降單位的價格</div>
           <div class="field-error" id="targetReturnError" role="alert"></div>
         </div>
       </div><!-- /card 交易條件 -->
 
-      <div class="card" aria-live="polite" aria-atomic="false">
+      <div class="card">
         <div class="card-header-row">
           <div class="card-tabs" id="tabNav" role="tablist" aria-label="結果顯示模式">
             <button type="button" data-tab="detail" class="active" role="tab" aria-selected="true">詳細試算</button>
@@ -233,7 +268,7 @@
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
             </button>
-            <div class="popover" id="rangeGearPopover" hidden role="dialog" aria-label="區間試算顯示設定">
+            <div class="popover" id="rangeGearPopover" hidden role="dialog" aria-label="區間試算顯示範圍設定">
               <div class="popover-header">
                 <span class="popover-title">顯示設定</span>
                 <button type="button" class="popover-close" data-close-popover aria-label="關閉設定">×</button>
@@ -255,15 +290,15 @@
         <div class="tab-content" data-tab="detail" role="tabpanel">
           <div class="result-section">
             <div class="result-row">
-              <span class="label">買進金額</span>
+              <span class="label" id="buyAmountLabel">買進金額</span>
               <span class="value" id="buyAmount">-</span>
             </div>
             <div class="result-row">
-              <span class="label">買進手續費</span>
+              <span class="label" id="buyFeeLabel">買進手續費</span>
               <span class="value" id="buyFee">-</span>
             </div>
             <div class="result-row highlight">
-              <span class="label">買進總成本</span>
+              <span class="label" id="totalCostLabel">買進總成本</span>
               <span class="value" id="totalCost">-</span>
             </div>
             <div class="result-row sub">
@@ -274,11 +309,11 @@
 
           <div class="result-section">
             <div class="result-row">
-              <span class="label">賣出金額</span>
+              <span class="label" id="sellAmountLabel">賣出金額</span>
               <span class="value" id="sellAmount">-</span>
             </div>
             <div class="result-row">
-              <span class="label">賣出手續費</span>
+              <span class="label" id="sellFeeLabel">賣出手續費</span>
               <span class="value" id="sellFee">-</span>
             </div>
             <div class="result-row">
@@ -290,11 +325,11 @@
               <span class="value" id="borrowFee">-</span>
             </div>
             <div class="result-row highlight">
-              <span class="label">賣出淨收入</span>
+              <span class="label" id="netSellLabel">賣出淨收入</span>
               <span class="value" id="netSell">-</span>
             </div>
             <div class="result-row sub">
-              <span class="label">└ 每股實際淨收</span>
+              <span class="label">└ 每股實際淨收入</span>
               <span class="value" id="netPerShare">-</span>
             </div>
           </div>
@@ -322,7 +357,7 @@
               <span class="value" id="breakeven">-</span>
             </div>
             <div class="result-row">
-              <span class="label">總交易成本 (手續費+稅)</span>
+              <span class="label" id="totalFeesLabel">總交易成本 (手續費 + 稅)</span>
               <span class="value" id="totalFees">-</span>
             </div>
           </div>
@@ -339,7 +374,7 @@
               <span class="value" id="rangeBreakeven">-</span>
             </div>
             <div class="result-row big" id="rangeCenterProfitRow">
-              <span class="label" id="rangeCenterProfitLabel">中心賣價損益</span>
+              <span class="label" id="rangeCenterProfitLabel">目前賣價的損益</span>
               <span class="value" id="rangeCenterProfit">-</span>
             </div>
           </div>
@@ -349,31 +384,31 @@
               <thead>
                 <tr>
                   <th id="rangePriceLabel">賣出價</th>
-                  <th>損益試算</th>
+                  <th>損益</th>
                   <th>報酬率</th>
                 </tr>
               </thead>
               <tbody id="rangeTableBody">
-                <tr><td colspan="3" class="empty">請於左側輸入價格與數量</td></tr>
+                <tr><td colspan="3" class="empty">請先輸入有效的價格與數量</td></tr>
               </tbody>
             </table>
           </div>
 
           <div class="help" style="margin-top: 12px; line-height: 1.7;">
-            ※ 表格中心為設定的<strong>賣出價(做多)</strong>或<strong>回補價(做空)</strong>，上下展開 ±<span id="rangeHalfText">5</span> 個升降單位共 <span id="rangeTotalText">11</span> 列<br>
-            ※ 其他條件(買進價、手續費、稅率、借券費等)維持原設定不變
+            ※ 表格以目前的<strong>賣出價（做多）</strong>或<strong>回補價（做空）</strong>為中心，上下各展開 <span id="rangeHalfText">5</span> 個升降單位，共 <span id="rangeTotalText">11</span> 列<br>
+            ※ 其他條件（買進價、手續費、稅率、借券費等）維持不變
           </div>
         </div><!-- /tab-content range -->
       </div><!-- /card right -->
     </div><!-- /layout -->
 
-    <!-- D1 — 除權息 layout (顯示由 :root[data-app-mode] CSS 規則控制,避免 FOUC) -->
+    <!-- 除權息 layout (顯示由 :root[data-app-mode] CSS 規則控制,避免 FOUC) -->
     <div class="layout" id="layoutDividend">
       <div class="card">
         <h2>
           除權息條件
           <div class="popover-host" style="margin-left:auto;">
-            <button type="button" class="gear-btn" id="divGearBtn" title="進階設定:健保補充保費與其他綜合所得" aria-label="進階設定:健保補充保費與其他綜合所得" aria-haspopup="dialog" aria-expanded="false" aria-controls="divGearPopover">
+            <button type="button" class="gear-btn" id="divGearBtn" title="進階設定：健保補充保費與其他綜合所得" aria-label="進階設定：健保補充保費與其他綜合所得" aria-haspopup="dialog" aria-expanded="false" aria-controls="divGearPopover">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -388,19 +423,19 @@
                 <div class="field">
                   <label for="healthRate">二代健保補充保費率 (%)</label>
                   <input type="number" id="healthRate" value="2.11" step="0.01" min="0" max="100" inputmode="decimal">
-                  <div class="help">2024 年起為 2.11%,實際請以最新法規為準</div>
+                  <div class="help" id="healthRateHelp">自 2021 年起為 2.11%，實際以健保署最新公告為準</div>
                   <div class="field-error" id="healthRateError" role="alert"></div>
                 </div>
                 <div class="field">
                   <label for="healthThreshold">補充保費起徵點 (元)</label>
                   <input type="number" id="healthThreshold" value="20000" step="1000" min="0" inputmode="numeric">
-                  <div class="help">單筆股利達此金額才扣補充保費</div>
+                  <div class="help">單次給付（現金股利＋股票股利面額）達此金額才扣繳</div>
                   <div class="field-error" id="healthThresholdError" role="alert"></div>
                 </div>
                 <div class="field">
                   <label for="otherIncome">股利以外綜合所得淨額 (元)</label>
                   <input type="number" id="otherIncome" value="600000" step="10000" min="0" inputmode="numeric">
-                  <div class="help">用於精算邊際稅率與「合併課稅 vs 分離課稅」比較</div>
+                  <div class="help">用來推算邊際稅率，並比較合併課稅與分離課稅</div>
                   <div class="field-error" id="otherIncomeError" role="alert"></div>
                 </div>
               </div>
@@ -419,13 +454,13 @@
           <div class="field" style="margin-bottom:0">
             <label for="cashDividend">現金股利 (元/股)</label>
             <input type="number" id="cashDividend" value="2.5" step="0.01" min="0" inputmode="decimal">
-            <div class="help">0 = 純除權</div>
+            <div class="help">填 0 表示只配股票股利</div>
             <div class="field-error" id="cashDividendError" role="alert"></div>
           </div>
           <div class="field" style="margin-bottom:0">
             <label for="stockDividend">股票股利 (元/股)</label>
             <input type="number" id="stockDividend" value="0" step="0.1" min="0" inputmode="decimal">
-            <div class="help">面額 10 元基準,1 元 = 配 0.1 股</div>
+            <div class="help">以面額 10 元計，每 1 元配 0.1 股（每張配 100 股）</div>
             <div class="field-error" id="stockDividendError" role="alert"></div>
           </div>
         </div>
@@ -446,15 +481,15 @@
         </div>
 
         <div class="field">
-          <label for="dividendBuyCost">我的買進成本(每股,選填)</label>
+          <label for="dividendBuyCost">買進均價 (每股，選填)</label>
           <input type="number" id="dividendBuyCost" value="0" step="0.01" min="0" inputmode="decimal">
           <div class="help" id="dividendBuyCostHelp" hidden>合計持有成本 <strong id="dividendBuyCostTotal">0</strong> 元</div>
-          <div class="help">填寫每股實際買進均價,試算除權息後成本降低多少;0 或留空則不顯示</div>
+          <div class="help">用來試算除權息後持有成本降低多少；填 0 或留空則不試算</div>
           <div class="field-error" id="dividendBuyCostError" role="alert"></div>
         </div>
       </div><!-- /card 除權息條件 -->
 
-      <div class="card" aria-live="polite" aria-atomic="false">
+      <div class="card">
         <h2>除權息試算結果</h2>
 
         <!-- 股價變化群組:參考價 → 填權息 → 殖利率 -->
@@ -506,16 +541,16 @@
             <span class="value" id="healthInsFee">-</span>
           </div>
           <div class="result-row sub" id="healthInsBasisRow" hidden>
-            <span class="label">└ 合計給付</span>
+            <span class="label">└ 補充保費計算基礎</span>
             <span class="value" id="healthInsBasis">-</span>
           </div>
-          <div class="result-row big money">
+          <div class="result-row big money" id="dividendNetRow">
             <span class="label">實領現金</span>
             <span class="value" id="dividendNet">-</span>
           </div>
           <div class="help" id="healthInsHelp" style="margin-top: 8px;" hidden>
-            ※ 依健保署規定:同一基準日的現金股利與股票股利為「同一次給付」,合併計算;股票股利按每股面額 10 元計算<br>
-            ※ 單次給付達 2 萬元以上、未超過 1,000 萬元部分扣繳 2.11%
+            ※ 依健保署規定，同一基準日的現金股利與股票股利視為同一次給付，合併計算；股票股利以每股面額 10 元計算<br>
+            ※ 單次給付達起徵點即依補充保費率扣繳，超過 1,000 萬元的部分不計
           </div>
         </div>
 
@@ -532,7 +567,7 @@
             <span class="label">└ 整股 / 畸零股</span>
             <span class="value" id="wholeFractionShares">-</span>
           </div>
-          <div class="help" style="margin-top: 8px;">※ 畸零股(&lt; 1 股)由發行公司公告以市價換現金</div>
+          <div class="help" style="margin-top: 8px;">※ 不足 1 股的畸零股，依公司法按面額折付現金</div>
         </div>
 
         <div class="result-section" id="costReductionSection" hidden>
@@ -548,31 +583,31 @@
             <span class="label">└ 降低幅度</span>
             <span class="value" id="newCostReduction">-</span>
           </div>
-          <div class="help" style="margin-top: 8px;">※ 以使用者輸入的買進均價為基準,不含買進手續費等實際成本</div>
+          <div class="help" style="margin-top: 8px;">※ 以你輸入的買進均價計算，不含買進手續費</div>
         </div>
 
         <div class="result-section tax-section">
           <div class="tax-section-title">股利所得稅試算</div>
           <div class="tax-section-subtitle">
-            目前邊際稅率 <strong id="marginalRateText">12%</strong>(股利以外綜合所得 <strong id="otherIncomeText">600,000</strong> 推算)
+            目前邊際稅率 <strong id="marginalRateText">12%</strong>（綜合所得淨額 <strong id="otherIncomeText">600,000</strong> 元加計股利後推算）
           </div>
 
           <div class="tax-method" id="taxMethodA">
             <div class="tax-method-header">
-              <span class="tax-method-label">A. 合併課稅(8.5% 抵減)</span>
-              <span class="tax-method-badge" id="taxMethodABadge" hidden>推薦</span>
+              <span class="tax-method-label">A. 合併課稅 (8.5% 抵減)</span>
+              <span class="tax-method-badge" id="taxMethodABadge" hidden>較省稅</span>
             </div>
             <div class="tax-method-rows">
-              <div class="result-row sub"><span class="label">股利增加應納稅</span><span class="value" id="taxAddA">-</span></div>
-              <div class="result-row sub"><span class="label">8.5% 抵減(上限 8 萬)</span><span class="value" id="taxCreditA">-</span></div>
+              <div class="result-row sub"><span class="label">股利增加的稅額</span><span class="value" id="taxAddA">-</span></div>
+              <div class="result-row sub"><span class="label">8.5% 可抵減稅額 (上限 8 萬元)</span><span class="value" id="taxCreditA">-</span></div>
               <div class="result-row"><span class="label">淨增加稅額</span><span class="value" id="taxNetA">-</span></div>
             </div>
           </div>
 
           <div class="tax-method" id="taxMethodB">
             <div class="tax-method-header">
-              <span class="tax-method-label">B. 分離課稅(28%)</span>
-              <span class="tax-method-badge" id="taxMethodBBadge" hidden>推薦</span>
+              <span class="tax-method-label">B. 分離課稅 (28%)</span>
+              <span class="tax-method-badge" id="taxMethodBBadge" hidden>較省稅</span>
             </div>
             <div class="tax-method-rows">
               <div class="result-row"><span class="label">應納稅額</span><span class="value" id="taxNetB">-</span></div>
@@ -580,8 +615,8 @@
           </div>
 
           <div class="help" style="margin-top: 8px;">
-            ※ 只試算股利造成的「增加」稅額,股利以外的綜合所得照常繳納<br>
-            ※ A 案抵減 &gt; 應納稅時為負值(可退稅);實際申報以財政部試算為準
+            ※ 只試算股利造成的「增加」稅額，股利以外的綜合所得照常繳納<br>
+            ※ A 案的可抵減稅額大於應納稅額時為負值（可退稅）；實際申報以財政部試算為準
           </div>
         </div>
       </div><!-- /card 除權息結果 -->
@@ -591,24 +626,30 @@
       ※ 本工具僅供試算參考，<strong>不構成任何投資建議</strong><br>
       <span id="footerNoteTrade">
         ※ 手續費以各券商實際收取為準，最低手續費可自行調整<br>
-        ※ 現股當沖證交稅減半至 2027/12/31 止(政策可能變更，請以最新法規為準)<br>
-        ※ 借券費率因券商與商品而異，實際以證商規定為準<br>
-        ※ 開發者不對計算結果之準確性負任何責任，實際損益以券商交割單為主
+        <span id="ruleDaytradeNote">※ 現股當沖證交稅減半至 2027/12/31 止（政策可能變更，請以最新法規為準）</span><br>
+        ※ 融券與借券費率因券商與個股而異，實際以券商規定為準<br>
+        ※ 開發者不對計算結果的準確性負責，實際損益以券商對帳單為準
       </span>
       <span id="footerNoteDividend">
-        ※ 二代健保補充保費率與起徵點請以衛福部最新公告為準<br>
-        ※ 綜所稅級距採 2024 年度(2025 申報)台灣現行稅制,實際以財政部公告為準<br>
-        ※ 「合併 vs 分離課稅」試算僅針對股利造成的「邊際」稅負,未含扣除額、免稅額等個人變項<br>
-        ※ 畸零股換現金、配股後零股交易等細節以發行公司公告為準
+        ※ 二代健保補充保費率與起徵點，以健保署最新公告為準<br>
+        ※ 綜所稅級距採 <span id="ruleTaxYear">2025 年度（2026 年申報）</span>稅制，實際以財政部公告為準<br>
+        ※ 合併與分離課稅的比較只計算股利造成的邊際稅負，未含扣除額、免稅額等個人條件<br>
+        ※ 畸零股折付現金、配股後的零股交易等細節，以發行公司公告為準
       </span>
       <span class="version-tag" id="appVersionTag"></span>
     </div>
   </div>
 
+  <!-- 行動版設定面板的遮罩 (桌面不顯示);點遮罩關閉面板,不會穿透點到下方按鈕 -->
+  <div class="popover-backdrop" id="popoverBackdrop" hidden></div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <div class="mobile-result-bar" id="mobileResultBar" role="status" aria-live="polite">
-    <button type="button" class="mobile-result-bar-tap" id="mobileBarTap" aria-label="跳到完整結果">
+  <!-- 螢幕閱讀器播報:輸入停頓後才念一次重點,避免每打一個字就念整張結果卡 -->
+  <div class="sr-only" id="srAnnounce" role="status" aria-live="polite"></div>
+
+  <div class="mobile-result-bar" id="mobileResultBar">
+    <button type="button" class="mobile-result-bar-tap" id="mobileBarTap" aria-label="捲到結果重點">
       <span class="mobile-result-bar-profit" id="mobileBarProfit">-</span>
       <span class="mobile-result-bar-return" id="mobileBarReturn">-</span>
       <span class="mobile-result-bar-track" aria-hidden="true">
@@ -621,9 +662,9 @@
 
   <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogText">
     <div class="confirm-dialog-body">
-      <div class="confirm-dialog-title" id="confirmDialogTitle">確定要重置嗎?</div>
+      <div class="confirm-dialog-title" id="confirmDialogTitle">確定要重置嗎？</div>
       <div class="confirm-dialog-text" id="confirmDialogText">
-        將清除進階設定(手續費設定)、商品類型、交易方向、所有輸入欄位與區間試算的範圍顯示設定，並還原為預設值。
+        交易試算的所有欄位與設定（手續費折扣、證交稅率、交易方向、做空方式、區間顯示範圍）將還原為預設值。
       </div>
       <div class="confirm-dialog-note">
         <span id="confirmDialogNoteInfo">除權息試算的資料不受影響。</span>

@@ -5,7 +5,7 @@
 // (設定 data-theme 與 data-app-mode),不能搬到此外部檔。
 
   const $ = id => document.getElementById(id);
-  const APP_VERSION = '1.4.2';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
+  const APP_VERSION = '1.5.0';  // 改這裡 → 自動觸發 SW 換版 + footer 顯示
   const STORAGE_KEY = 'twStockCalc.settings.v1';
   const DIVIDEND_STORAGE_KEY = 'twStockCalc.dividend.v1';   // 除權息獨立持久化
   const APP_MODE_KEY = 'twStockCalc.appMode';                // 頂層模式
@@ -13,11 +13,35 @@
   const TAB_KEY = 'twStockCalc.activeTab';
   const RANGE_KEY = 'twStockCalc.rangeHalf';  // 區間試算上下列數
   // 全部輸入欄位都持久化,重新整理可直接接續上次的試算
-  // DOM 欄位用 PERSIST_DOM_KEYS;JS 模組狀態 (direction/unit/productType) 與 buyEntries 在 save/load 顯式處理
-  const PERSIST_DOM_KEYS = ['sellPrice', 'discount', 'minFee', 'borrowRate', 'borrowDays', 'targetReturn'];
+  // DOM 欄位用 PERSIST_DOM_KEYS;JS 模組狀態 (direction/unit/productType/shortType) 與 buyEntries 在 save/load 顯式處理
+  const PERSIST_DOM_KEYS = ['sellPrice', 'discount', 'minFee', 'marginRate', 'borrowRate', 'borrowDays', 'targetReturn'];
   const DIVIDEND_PERSIST_KEYS = ['prePrice', 'cashDividend', 'stockDividend', 'dividendShares',
                                  'dividendBuyCost',
                                  'healthRate', 'healthThreshold', 'otherIncome'];
+  // ============================================================
+  // 每年需檢查的法規參數 — 稅制或費率變動時只改這一區
+  //   計算常數與頁面上的年度 / 費率說明 (renderRuleNotes) 都從這裡帶入
+  // ============================================================
+  const RULES = {
+    incomeTaxYear: 2025,                 // 綜所稅級距適用的所得年度 (隔年 5 月申報)
+    healthInsRatePct: 2.11,              // 二代健保補充保費率 (%)
+    healthInsRateSince: 2021,            // 現行補充保費率開始實施的年度
+    healthInsThreshold: 20000,           // 補充保費起徵點 (元)
+    daytradeHalfTaxUntil: '2027-12-31',  // 現股當沖證交稅減半 (0.15%) 的期限
+  };
+  // 綜所稅級距 (RULES.incomeTaxYear 年度,與 113 年度相同);最高稅率 40% (107 年度起已無 45%)
+  const TAX_BRACKETS = [
+    { limit:  590000, rate: 0.05 },
+    { limit: 1330000, rate: 0.12 },
+    { limit: 2660000, rate: 0.20 },
+    { limit: 4980000, rate: 0.30 },
+    { limit: Infinity, rate: 0.40 },
+  ];
+  const DIVIDEND_CREDIT_RATE = 0.085;    // 股利合併計稅可抵減比率
+  const DIVIDEND_CREDIT_CAP  = 80000;    // 可抵減稅額每戶上限
+  const DIVIDEND_SEPARATE_RATE = 0.28;   // 股利分開計稅稅率
+  const HEALTH_INS_CAP = 10_000_000;     // 二代健保補充保費單次給付計收上限 (超過部分不扣)
+
   const MAX_BUY_ENTRIES = 10;  // 加碼上限
   const ENTRY_NUMERALS = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
   const DEFAULTS = {
@@ -25,18 +49,24 @@
     buyEntries: [{ price: 100, qty: 1 }],
     sellPrice: 110,
     productType: 'stock', discount: 1, minFee: 20,
-    borrowRate: 0.08, borrowDays: 1, targetReturn: 5,
+    // 做空方式:margin = 融券 (賣出時一次收借券費);sbl = 借券 (年化費率 × 天數 / 365)
+    shortType: 'margin',
+    marginRate: 0.08,               // 融券借券費率 (%),一次收取
+    borrowRate: 1, borrowDays: 1,   // 借券 (SBL) 年化費率 (%) 與天數
+    targetReturn: 5,
   };
   const DIVIDEND_DEFAULTS = {
     prePrice: 50, cashDividend: 2.5, stockDividend: 0,
     dividendShares: 10, dividendUnit: 'lot',
     dividendBuyCost: 0,    // 0 = 不啟用成本降低試算
-    healthRate: 2.11, healthThreshold: 20000,
+    healthRate: RULES.healthInsRatePct, healthThreshold: RULES.healthInsThreshold,
     otherIncome: 600000,   // 落在 12% 級距
   };
+  // 現股當沖 0.15% 為減半優惠,期限見 RULES.daytradeHalfTaxUntil (過期時頁面會提醒)
   const TAX_RATES = { stock: 0.003, etf: 0.001, daytrade: 0.0015, none: 0 };
   // 報告用,與 #productTypeGroup 按鈕文字一致
-  const PRODUCT_LABELS = { stock: '一般 (0.3%)', etf: 'ETF (0.1%)', daytrade: '當沖 (0.15%)', none: '免稅' };
+  const PRODUCT_LABELS = { stock: '一般股票 (0.3%)', etf: 'ETF (0.1%)', daytrade: '現股當沖 (0.15%)', none: '免稅' };
+  const SHORT_TYPE_LABELS = { margin: '融券', sbl: '借券 (SBL)' };
   const FEE_RATE = 0.001425;
   const THEME_COLORS = { light: '#f5f5f5', dark: '#000000' };  // 對應 meta theme-color
   // Favicon 雙版本 (data URL,瞬間切換無 network 請求)
@@ -55,6 +85,7 @@
   let unit = DEFAULTS.unit;
   let direction = DEFAULTS.direction;
   let productType = DEFAULTS.productType;
+  let shortType = DEFAULTS.shortType;
   let activeTab = 'detail';
   let rangeRowsHalf = RANGE_HALF_DEFAULT;  // 動態狀態
   let buyEntries = cloneDefaultBuyEntries();  // 多筆加碼,動態陣列
@@ -117,8 +148,6 @@
     if (!isFinite(discount) || discount <= 0) discount = 1;
     if (discount > 1) discount = 1;
 
-    const days = Math.max(0, parseFloat($('borrowDays').value) || 0);
-    const annualBorrowRate = Math.max(0, (parseFloat($('borrowRate').value) || 0) / 100);
     const sharesPerUnit = unit === 'lot' ? 1000 : 1;
 
     return {
@@ -129,9 +158,34 @@
       minFee: Math.max(0, parseFloat($('minFee').value) || 0),
       productType,
       taxRate: TAX_RATES[productType] ?? 0.003,
-      // 實際借券費率 = 年化費率 × 天數 / 365,做多時為 0
-      borrowEffRate: direction === 'short' ? annualBorrowRate * days / 365 : 0,
+      // 借券費占賣出金額的比率;做多、現股當沖 (先賣後買不需借券) 為 0
+      borrowEffRate: calcShortBorrowRate(direction, productType, shortType,
+        parseFloat($('marginRate').value),
+        parseFloat($('borrowRate').value),
+        parseFloat($('borrowDays').value)),
     };
+  }
+
+  // 這筆交易是否需要借券 (才有借券費):只有做空,且不是現股當沖
+  //   現股當沖的先賣後買是用當日買回的股票交割,不需融券或借券
+  function shortNeedsBorrow(dir, product) {
+    return dir === 'short' && product !== 'daytrade';
+  }
+
+  // 依交易條件決定借券費率;不需借券時為 0
+  function calcShortBorrowRate(dir, product, type, marginRatePct, annualRatePct, days) {
+    if (!shortNeedsBorrow(dir, product)) return 0;
+    return calcBorrowEffRate(type, marginRatePct, annualRatePct, days);
+  }
+
+  // 借券費占賣出金額的比率 (費率輸入單位為 %)
+  //   融券 (margin):賣出時一次收取 → 費率本身,與天數無關
+  //   借券 (sbl):年化費率 × 天數 / 365
+  //   負值、NaN 一律視為 0
+  function calcBorrowEffRate(type, marginRatePct, annualRatePct, days) {
+    const pos = v => Math.max(0, isFinite(v) ? v : 0);
+    if (type === 'sbl') return pos(annualRatePct) / 100 * pos(days) / 365;
+    return pos(marginRatePct) / 100;
   }
 
   // 計算手續費 (含最低門檻、無條件捨去)
@@ -145,7 +199,8 @@
     const amount = round2(price * shares);
     const fee = calcFee(amount, discount, minFee);
     const tax = isSell ? Math.floor(amount * taxRate) : 0;
-    const borrowFee = isSell ? Math.floor(amount * borrowEffRate) : 0;
+    // + 1e-6:避免 0.08% 這類費率的浮點誤差 (79.99999…) 被無條件捨去少 1 元
+    const borrowFee = isSell ? Math.floor(amount * borrowEffRate + 1e-6) : 0;
     return { amount, fee, tax, borrowFee };
   }
 
@@ -266,20 +321,9 @@
   //   - 配股後股數   = 持股 × (1 + 股票股利 / 10)
   //   - 填權息漲幅   = (除權息前股價 / 參考價 − 1) × 100%   (目標即還原至前股價)
   //   - 殖利率       = 股利 / 除權息前股價 × 100%
-  // 二代健保補充保費:單筆股利「給付金額」≥ 起徵點時,以該筆 × 費率收取
+  // 二代健保補充保費:同一次給付 (現金股利 + 股票股利面額) ≥ 起徵點時,依費率收取
   // ============================================================
-  const TAX_BRACKETS = [
-    { limit:  590000, rate: 0.05 },
-    { limit: 1330000, rate: 0.12 },
-    { limit: 2660000, rate: 0.20 },
-    { limit: 4980000, rate: 0.30 },
-    { limit: 7470000, rate: 0.40 },
-    { limit: Infinity, rate: 0.45 },
-  ];
-  const DIVIDEND_CREDIT_RATE = 0.085;
-  const DIVIDEND_CREDIT_CAP  = 80000;
-  const DIVIDEND_SEPARATE_RATE = 0.28;
-  const HEALTH_INS_CAP = 10_000_000;  // 二代健保補充保費單次給付計收上限 (超過部分不扣)
+  // 綜所稅級距、股利課稅與補充保費常數集中在檔案開頭的「每年需檢查的法規參數」
 
   function calcExDividendPrice(prePrice, cashDividend, stockDividend) {
     if (!(prePrice > 0)) return 0;
@@ -295,8 +339,8 @@
   //   依健保署規定 (https://www.nhi.gov.tw/ch/cp-2893-bba7c-3150-1.html):
   //     - 股票股利「以股票之面額每股 10 元計算」應扣補充保費 (非市價)
   //     - 同一基準日的現金股利與股票股利視為「同一次給付」,合併判定門檻
-  //     - 單次給付達 20,000 元以上、未超過 1,000 萬部分才計入計收基數
-  //     - 費率 2.11% (自 110/1/1 起)
+  //     - 單次給付達起徵點 (預設 20,000 元) 以上、未超過 1,000 萬部分才計入計收基數
+  //     - 費率預設 2.11% (自 110/1/1 起);預設值集中在 RULES
   //     - 保費金額四捨五入到元 (對齊健保署 cloudicweb.nhi.gov.tw/esrv/trialbill 試算器)
   //   公式:
   //     - 現金 gross  = shares × cashDividend
@@ -376,7 +420,7 @@
     return { cash, stock, total: cash + stock };
   }
 
-  // 累進稅:income 落在各級距按差額逐級加總 (台灣綜所稅 2024 年度級距)
+  // 累進稅:income 落在各級距按差額逐級加總 (台灣綜所稅 2025 年度級距)
   function calcProgressiveTax(income) {
     const inc = Math.max(0, income || 0);
     if (inc === 0) return 0;
@@ -500,20 +544,35 @@
     // 買進列表內各筆 input 的 step 由 renderBuyList 處理
   }
 
+  // 做多 / 做空的結果標籤:做空時「買進」是回補、「賣出」是放空
+  const SIDE_LABELS = {
+    long:  { buyList: '買進列表', sellPrice: '賣出價格 (元)', breakeven: '損益兩平賣價',
+             buyAmount: '買進金額', buyFee: '買進手續費', totalCost: '買進總成本',
+             sellAmount: '賣出金額', sellFee: '賣出手續費', netSell: '賣出淨收入' },
+    short: { buyList: '回補列表', sellPrice: '放空價格 (元)', breakeven: '損益兩平回補價',
+             buyAmount: '回補金額', buyFee: '回補手續費', totalCost: '回補總成本',
+             sellAmount: '放空金額', sellFee: '放空手續費', netSell: '放空淨收入' },
+  };
+
   function updateDirectionUI() {
-    if (direction === 'short') {
-      $('buyListLabel').firstChild.textContent = '回補列表';
-      $('sellPriceLabel').textContent = '放空價格 (元)';
-      $('breakevenLabel').textContent = '損益兩平回補價';
-      $('borrowField').style.display = '';
-      $('borrowFeeRow').style.display = '';
-    } else {
-      $('buyListLabel').firstChild.textContent = '買進列表';
-      $('sellPriceLabel').textContent = '賣出價格 (元)';
-      $('breakevenLabel').textContent = '損益兩平賣價';
-      $('borrowField').style.display = 'none';
-      $('borrowFeeRow').style.display = 'none';
-    }
+    const isShort = direction === 'short';
+    const needsBorrow = shortNeedsBorrow(direction, productType);
+    const L = SIDE_LABELS[isShort ? 'short' : 'long'];
+    $('buyListLabel').firstChild.textContent = L.buyList;
+    $('sellPriceLabel').textContent = L.sellPrice;
+    $('breakevenLabel').textContent = L.breakeven;
+    ['buyAmount', 'buyFee', 'totalCost', 'sellAmount', 'sellFee', 'netSell'].forEach(k => {
+      $(k + 'Label').textContent = L[k];
+    });
+    // 有借券費時,總交易成本也包含借券費,標籤跟著說清楚
+    $('totalFeesLabel').textContent = needsBorrow ? '總交易成本 (手續費 + 稅 + 借券費)' : '總交易成本 (手續費 + 稅)';
+    $('borrowFeeRow').style.display = needsBorrow ? '' : 'none';
+    // 做空方式與對應的費率欄位:融券只有一次收的費率;借券 (SBL) 有年化費率與天數
+    // 現股當沖的先賣後買不需借券 → 隱藏借券相關欄位,改顯示說明
+    $('daytradeShortNote').style.display = isShort && !needsBorrow ? '' : 'none';
+    $('shortTypeField').style.display = needsBorrow ? '' : 'none';
+    $('marginFeeField').style.display = needsBorrow && shortType === 'margin' ? '' : 'none';
+    $('borrowField').style.display    = needsBorrow && shortType === 'sbl' ? '' : 'none';
   }
 
   function syncToggleGroups() {
@@ -536,6 +595,11 @@
     syncThemeButton();
     [...$('productTypeGroup').children].forEach(b => {
       const active = b.dataset.product === productType;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', active);
+    });
+    [...$('shortTypeGroup').children].forEach(b => {
+      const active = b.dataset.shortType === shortType;
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', active);
     });
@@ -565,8 +629,8 @@
     if (!btn) return;
     btn.setAttribute('data-current-theme', themeMode);
     const label = THEME_LABELS[themeMode] || themeMode;
-    btn.setAttribute('aria-label', '切換主題(目前:' + label + ',點擊切換)');
-    btn.title = '主題:' + label;
+    btn.setAttribute('aria-label', '切換主題（目前：' + label + '，點擊切換）');
+    btn.title = '主題：' + label;
   }
 
   function cycleTheme() {
@@ -591,9 +655,20 @@
     syncToggleGroups();
   }
 
+  // 主畫面圖示 (apple-touch-icon) 跟系統深淺色走,不跟 App 內主題:
+  // iOS 只在「加入主畫面」當下讀取,系統深色時加入就拿到深色版
+  const APPLE_ICON_LIGHT = 'icons/apple-touch-icon.png';
+  const APPLE_ICON_DARK  = 'icons/apple-touch-icon-dark.png';
+  const systemDarkMql = matchMedia('(prefers-color-scheme: dark)');
+  function syncAppleTouchIcon() {
+    const link = $('appleTouchIcon');
+    if (link) link.setAttribute('href', systemDarkMql.matches ? APPLE_ICON_DARK : APPLE_ICON_LIGHT);
+  }
+
   // 系統主題變化時,只在 auto 模式下跟著切
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  systemDarkMql.addEventListener('change', () => {
     if (themeMode === 'auto') applyTheme('auto');
+    syncAppleTouchIcon();
   });
 
   // ============================================================
@@ -602,12 +677,13 @@
   //   warn  (黃) = 軟性警示,計算仍可進行
   // ============================================================
   const VALIDATORS = {
-    sellPrice:    { type: 'error', test: v => v > 0,                            msg: '請輸入正數' },
-    discount:     { type: 'error', test: v => v > 0 && v <= 1,                  msg: '折扣應介於 0 ~ 1 之間 (如 0.6 = 6 折)' },
-    minFee:       { type: 'error', test: v => v >= 0,                           msg: '需 ≥ 0' },
-    borrowDays:   { type: 'error', test: v => v >= 0 && Number.isInteger(v),    msg: '天數需 ≥ 0 整數' },
-    borrowRate:   { type: 'warn',  test: v => v >= 0 && v <= 50,                msg: '年化費率超出常見範圍(0~50%)，請確認' },
-    targetReturn: { type: 'warn',  test: v => v >= -100 && v <= 100,            msg: '報酬率超出常見範圍 (±100%)' },
+    sellPrice:    { type: 'error', test: v => v > 0,                            msg: '請輸入大於 0 的價格' },
+    discount:     { type: 'error', test: v => v > 0 && v <= 1,                  msg: '請輸入 0.01～1 之間的折數，例如 6 折填 0.6' },
+    minFee:       { type: 'error', test: v => v >= 0,                           msg: '不可為負數' },
+    marginRate:   { type: 'warn',  test: v => v >= 0 && v <= 1,                 msg: '費率超出常見範圍（0～1%），請確認' },
+    borrowDays:   { type: 'error', test: v => v >= 0 && Number.isInteger(v),    msg: '請輸入 0 以上的整數' },
+    borrowRate:   { type: 'warn',  test: v => v >= 0 && v <= 50,                msg: '年化費率超出常見範圍（0～50%），請確認' },
+    targetReturn: { type: 'warn',  test: v => v >= -100 && v <= 100,            msg: '報酬率超出常見範圍（±100%），請確認' },
   };
   // 共用驗證套用:讀 input value、跑 test、套用 has-error / has-warn class + aria
   //   skipPredicate(id) → 回 true 則跳過 (例如借券欄在做多時隱藏)
@@ -637,9 +713,13 @@
     });
   }
   function validateInputs() {
-    applyValidators(VALIDATORS, id =>
-      (id === 'borrowRate' || id === 'borrowDays') && direction !== 'short'
-    );
+    // 只驗證目前看得到的借券欄位 (做多全部跳過;融券只看 marginRate;借券只看年化費率與天數)
+    const needsBorrow = shortNeedsBorrow(direction, productType);
+    applyValidators(VALIDATORS, id => {
+      if (id === 'marginRate') return !needsBorrow || shortType !== 'margin';
+      if (id === 'borrowRate' || id === 'borrowDays') return !needsBorrow || shortType !== 'sbl';
+      return false;
+    });
     validateBuyEntries();
   }
   // 多筆買進驗證 (顯示在 #buyListField 上,訊息列在 #buyEntriesError)
@@ -649,15 +729,15 @@
     if (!field || !errEl) return;
     const errors = [];
     buyEntries.forEach((e, i) => {
-      if (!(e.price > 0)) errors.push('第 ' + (i + 1) + ' 筆價格需 > 0');
-      else if (!(e.qty >= 1 && Number.isInteger(e.qty))) errors.push('第 ' + (i + 1) + ' 筆數量需 ≥ 1 整數');
+      if (!(e.price > 0)) errors.push('第 ' + (i + 1) + ' 筆價格須大於 0');
+      else if (!(e.qty >= 1 && Number.isInteger(e.qty))) errors.push('第 ' + (i + 1) + ' 筆數量須為 1 以上的整數');
     });
     if (errors.length === 0) {
       field.classList.remove('has-error');
       errEl.textContent = '';
     } else {
       field.classList.add('has-error');
-      errEl.textContent = errors[0] + (errors.length > 1 ? ' (另 ' + (errors.length - 1) + ' 項錯誤)' : '');
+      errEl.textContent = errors[0] + (errors.length > 1 ? '（另有 ' + (errors.length - 1) + ' 項錯誤）' : '');
     }
   }
   function clearFieldError(id, el, field, errEl) {
@@ -716,9 +796,33 @@
       returnEl.textContent = (returnRate > 0 ? '+' : '')
         + (isFinite(returnRate) ? returnRate.toFixed(2) : '0.00') + '%';
     }
+    bar.classList.remove('mode-dividend');
     bar.classList.toggle('profit', profit > 0);
     bar.classList.toggle('loss',   profit < 0);
     if (fill) applyBarFill(fill, returnRate, RETURN_BAR_CAP);
+  }
+
+  // 除權息模式的底部結果列:實領現金 + 總殖利率 (金色,不套紅綠損益色)
+  function updateMobileBarDividend(net, totalYield) {
+    const bar = $('mobileResultBar');
+    if (!bar) return;
+    bar.classList.add('mode-dividend');
+    bar.classList.remove('profit', 'loss');
+    const profitEl = $('mobileBarProfit');
+    const returnEl = $('mobileBarReturn');
+    if (profitEl) profitEl.textContent = '實領 ' + fmtMoney(net);
+    if (returnEl) returnEl.textContent = '殖利率 ' + (isFinite(totalYield) ? totalYield.toFixed(2) : '0.00') + '%';
+  }
+
+  // 螢幕閱讀器播報:輸入停頓 1 秒後才念一次重點 (啟動時不念)
+  let _announceReady = false, _announceTimer = 0;
+  function scheduleAnnounce(text) {
+    if (!_announceReady) return;
+    clearTimeout(_announceTimer);
+    _announceTimer = setTimeout(() => {
+      const el = $('srAnnounce');
+      if (el) el.textContent = text;
+    }, 1000);
   }
 
   // ============================================================
@@ -764,10 +868,11 @@
 
     // snapshot 給 buildReportText 用
     lastTradeData = {
-      direction, unit, productType,
+      direction, unit, productType, shortType,
       buyEntries: buyEntries.map(e => ({ price: e.price, qty: e.qty })),
       sellPriceInput: $('sellPrice').value,
       discount, discountInput: $('discount').value,
+      marginRateInput: $('marginRate').value,
       borrowRateInput: $('borrowRate').value, borrowDaysInput: $('borrowDays').value,
       shares, avgCost,
       buyAmount, buyFee, totalCost,
@@ -780,7 +885,10 @@
     $('profitRow').className = 'result-row big ' + cls;
     $('returnRow').className = 'result-row ' + cls;
     updateReturnBar(returnRate);
-    updateMobileBar(profit, returnRate);
+    if (appMode === 'trade') {   // 底部列與播報只反映目前模式
+      updateMobileBar(profit, returnRate);
+      scheduleAnnounce('損益 ' + $('profit').textContent + '，報酬率 ' + $('returnRate').textContent);
+    }
 
     // 區間試算只在 active 時重畫;切回 range tab 由 switchTab 觸發
     if (activeTab === 'range') renderRangeTable();
@@ -789,7 +897,7 @@
   // ============================================================
   // 區間試算 — 渲染表格
   //   做多: 中心 = sellPrice,變動賣價、固定買價
-  //   做空: 中心 = buyPrice(回補價),變動回補價、固定放空價
+  //   做空: 中心 = 平均回補價,變動回補價、固定放空價
   //   公式與計算結果一致 → 使用同一 readInputs/calcSide/calcBreakeven 路徑
   // ============================================================
   function renderRangeTable() {
@@ -820,12 +928,12 @@
     // 動態標籤
     elPriceLabel.textContent = isShort ? '回補價' : '賣出價';
     elBeLabel.textContent = isShort ? '損益兩平回補價' : '損益兩平賣價';
-    elCpLabel.textContent = isShort ? '中心回補價損益' : '中心賣價損益';
+    elCpLabel.textContent = isShort ? '目前回補價的損益' : '目前賣價的損益';
     elFixedLabel.textContent = isShort ? '放空淨收入' : '買進總成本';
 
     if (shares <= 0 || center <= 0 || sellPrice <= 0) {
       if (_rangeTableMode !== 'empty') {
-        body.innerHTML = '<tr><td colspan="3" class="empty">請於左側輸入有效的價格與數量</td></tr>';
+        body.innerHTML = '<tr><td colspan="3" class="empty">請先輸入有效的價格與數量</td></tr>';
         _rangeTableMode = 'empty';
       }
       elFixedValue.textContent = '-';
@@ -946,16 +1054,18 @@
       const btn = $('rangeGearBtn');
       if (pop) pop.hidden = true;
       if (btn) btn.setAttribute('aria-expanded', 'false');
+      syncPopoverBackdrop();
     }
     try { localStorage.setItem(TAB_KEY, name); } catch (_) {}
     if (name === 'range') renderRangeTable();
+    refreshMobileBarVisibility();
   }
 
   // ============================================================
   // 模式切換 (交易試算 / 除權息試算)
   // ------------------------------------------------------------
   // 兩個 layout 用 hidden 切換而非條件 render,避免事件 binding 重複附加
-  // 切模式時關閉所有 popover、隱藏行動底部 bar (除權息模式)
+  // 切模式時關閉所有 popover;行動底部結果列改顯示該模式的重點 (損益 / 實領現金)
   // ============================================================
   function applyMode(name) {
     if (name !== 'trade' && name !== 'dividend') name = 'trade';
@@ -972,26 +1082,24 @@
       ? '試算除權息參考價、配股配息與股利所得稅'
       : '試算手續費、證交稅與實際損益';
     closeAllPopovers();
-    // 行動底部 sticky bar 只在交易模式有意義 (損益/報酬率)
-    const mbar = $('mobileResultBar');
-    if (mbar) mbar.classList.toggle('hidden-by-mode', name !== 'trade');
     try { localStorage.setItem(APP_MODE_KEY, name); } catch (_) {}
     if (name === 'dividend') calculateDividend();
     else calculate();
+    refreshMobileBarVisibility();   // 底部結果列內容與自動隱藏的目標列都隨模式切換
   }
 
   // ============================================================
   // 除權息計算
   // ============================================================
   const DIVIDEND_VALIDATORS = {
-    prePrice:        { type: 'error', test: v => v > 0,                msg: '請輸入正數股價' },
-    cashDividend:    { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
-    stockDividend:   { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
-    dividendShares:  { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
-    dividendBuyCost: { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
-    healthRate:      { type: 'warn',  test: v => v >= 0 && v <= 10,    msg: '費率超出常見範圍 (0~10%)' },
-    healthThreshold: { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
-    otherIncome:     { type: 'error', test: v => v >= 0,               msg: '需 ≥ 0' },
+    prePrice:        { type: 'error', test: v => v > 0,                msg: '請輸入大於 0 的股價' },
+    cashDividend:    { type: 'error', test: v => v >= 0,               msg: '不可為負數' },
+    stockDividend:   { type: 'error', test: v => v >= 0,               msg: '不可為負數' },
+    dividendShares:  { type: 'error', test: v => v >= 0,               msg: '不可為負數' },
+    dividendBuyCost: { type: 'error', test: v => v >= 0,               msg: '不可為負數' },
+    healthRate:      { type: 'warn',  test: v => v >= 0 && v <= 10,    msg: '費率超出常見範圍（0～10%），請確認' },
+    healthThreshold: { type: 'error', test: v => v >= 0,               msg: '不可為負數' },
+    otherIncome:     { type: 'error', test: v => v >= 0,               msg: '不可為負數' },
   };
 
   function validateDividendInputs() {
@@ -1005,7 +1113,7 @@
       if (field && !field.classList.contains('has-error')) {
         field.classList.add('has-warn');
         $('cashDividend').setAttribute('aria-describedby', 'cashDividendError');
-        if (errEl) errEl.textContent = '現金與股票股利都為 0,沒有除權息可算';
+        if (errEl) errEl.textContent = '現金股利與股票股利皆為 0，沒有可試算的除權息';
       }
     }
   }
@@ -1063,6 +1171,10 @@
       dividendIncome, taxData, marginalRate, otherIncome,
     };
     renderDividend(renderData);
+    if (appMode === 'dividend') {   // 底部列與播報只反映目前模式
+      updateMobileBarDividend(cashIncome.net, yieldData.total);
+      scheduleAnnounce('實領現金 ' + fmtMoney(cashIncome.net) + '，總殖利率 ' + yieldData.total.toFixed(2) + '%');
+    }
     // snapshot 給 buildDividendReportText 用 (renderData + 原始輸入欄位)
     lastDividendData = Object.assign({}, renderData, {
       dividendUnit,
@@ -1107,7 +1219,7 @@
 
     // 現金股利收入
     d.dividendGross.textContent = fmtMoney(r.cashIncome.gross);
-    // 補充保費合併計算:有股票股利時顯示合計給付 sub 行 + 法規說明
+    // 補充保費合併計算:有股票股利時顯示「補充保費計算基礎」sub 行 + 法規說明
     const hasStock = r.cashIncome.stockGross > 0;
     const showFee  = r.cashIncome.healthIns > 0;
     d.healthInsRow.hidden      = !showFee;
@@ -1136,14 +1248,14 @@
       d.stockAllocSection.hidden = true;
     }
 
-    // 成本降低 (僅在使用者填寫買進成本 > 0 且有持股時顯示)
+    // 成本降低 (僅在使用者填寫買進均價 > 0 且有持股時顯示)
     if (r.dividendBuyCost > 0 && r.totalShares > 0 && (r.cashDividend > 0 || r.stockDividend > 0)) {
       d.costReductionSection.hidden = false;
       d.newCostTotal.textContent     = fmtMoney(r.costRed.newCostTotal);
       d.newCostPerShare.textContent  = 'NT$ ' + r.costRed.newCostPerShare.toFixed(2);
       d.newCostReduction.textContent =
-        '降 NT$ ' + r.costRed.costReduction.toFixed(2) + '/股 (' +
-        r.costRed.costReductionPct.toFixed(2) + '%)';
+        '每股降低 NT$ ' + r.costRed.costReduction.toFixed(2) + '（' +
+        r.costRed.costReductionPct.toFixed(2) + '%）';
     } else {
       d.costReductionSection.hidden = true;
     }
@@ -1178,7 +1290,7 @@
       : fmtMoney(netA);
     d.taxNetB.textContent = fmtMoney(r.taxData.methodB.netTax);
 
-    // 推薦標籤 (退稅情境也算 A 優)
+    // 「較省稅」標籤 (退稅情境也算 A 優)
     const aBetter = r.taxData.better === 'A';
     d.taxMethodABadge.hidden = !aBetter;
     d.taxMethodBBadge.hidden = aBetter;
@@ -1188,13 +1300,35 @@
     // 合計股數提示
     d.dividendSharesTotal.textContent = Math.round(r.totalShares).toLocaleString('en-US');
 
-    // 合計持有成本提示 (有設定買進成本才顯示)
+    // 合計持有成本提示 (有填買進均價才顯示)
     const showBuyCostTotal = r.dividendBuyCost > 0 && r.totalShares > 0;
     d.dividendBuyCostHelp.hidden = !showBuyCostTotal;
     if (showBuyCostTotal) {
       d.dividendBuyCostTotal.textContent =
         Math.round(r.dividendBuyCost * r.totalShares).toLocaleString('en-US');
     }
+  }
+
+  // 把 RULES 的年度與費率寫進頁面說明;現股當沖減半過期時改為提醒
+  function isDaytradeHalfTaxExpired(now) {
+    return now > new Date(RULES.daytradeHalfTaxUntil + 'T23:59:59+08:00');
+  }
+  function renderRuleNotes() {
+    const y = RULES.incomeTaxYear;
+    const until = RULES.daytradeHalfTaxUntil.replace(/-/g, '/');
+    const expired = isDaytradeHalfTaxExpired(new Date());
+    $('ruleTaxYear').textContent = y + ' 年度（' + (y + 1) + ' 年申報）';
+    $('healthRateHelp').textContent =
+      '自 ' + RULES.healthInsRateSince + ' 年起為 ' + RULES.healthInsRatePct + '%，實際以健保署最新公告為準';
+    $('ruleDaytradeNote').textContent = expired
+      ? '※ 現股當沖證交稅減半已於 ' + until + ' 到期，0.15% 可能已不適用，請以最新法規為準'
+      : '※ 現股當沖證交稅減半至 ' + until + ' 止（政策可能變更，請以最新法規為準）';
+    $('daytradeExpiredNote').hidden = !expired;
+    $('daytradeExpiredNote').textContent =
+      '現股當沖證交稅減半已於 ' + until + ' 到期，0.15% 可能已不適用，請確認最新稅率';
+    // 健保費率與起徵點的欄位預設值也從 RULES 帶入 (使用者存過的值會在 loadDividendSettings 覆蓋)
+    $('healthRate').value = DIVIDEND_DEFAULTS.healthRate;
+    $('healthThreshold').value = DIVIDEND_DEFAULTS.healthThreshold;
   }
 
   function syncDividendUnitGroup() {
@@ -1251,7 +1385,7 @@
 
   function buildDividendReportText() {
     const d = lastDividendData;
-    if (!d) return '(尚未計算)';
+    if (!d) return '（尚未計算）';
     const unitLabel = d.dividendUnit === 'lot' ? '張' : '股';
     const hasRef    = d.prePrice > 0 && (d.cashDividend > 0 || d.stockDividend > 0);
     const refPriceStr = hasRef ? 'NT$ ' + d.refPrice.toFixed(2) : '-';
@@ -1267,70 +1401,70 @@
     const lines = [
       '台股除權息計算結果',
       '─────────────',
-      '除權息前股價: ' + d.prePriceInput + ' 元',
-      '現金股利: ' + d.cashDividendInput + ' 元/股',
-      '股票股利: ' + d.stockDividendInput + ' 元/股',
-      '持股: ' + d.dividendSharesInput + ' ' + unitLabel +
-        ' (= ' + Math.round(d.totalShares).toLocaleString('en-US') + ' 股)',
+      '除權息前股價：' + d.prePriceInput + ' 元',
+      '現金股利：' + d.cashDividendInput + ' 元/股',
+      '股票股利：' + d.stockDividendInput + ' 元/股',
+      '持股：' + d.dividendSharesInput + ' ' + unitLabel +
+        '（共 ' + Math.round(d.totalShares).toLocaleString('en-US') + ' 股）',
     ];
     if (d.dividendBuyCost > 0 && d.totalShares > 0) {
-      lines.push('持有成本: ' + fmtMoney(d.dividendBuyCost * d.totalShares) + ' 元');
+      lines.push('持有成本：' + fmtMoney(d.dividendBuyCost * d.totalShares));
     }
     lines.push(
       '─────────────',
-      '除權息參考價: ' + refPriceStr,
-      '除權息調降: ' + dropStr,
-      '填權息所需漲幅: ' + fillGainStr,
-      '填權息目標價: ' + fillTargetStr,
-      '現金殖利率: ' + d.yieldData.cash.toFixed(2) + '%',
+      '除權息參考價：' + refPriceStr,
+      '除權息調降：' + dropStr,
+      '填權息所需漲幅：' + fillGainStr,
+      '填權息目標價：' + fillTargetStr,
+      '現金殖利率：' + d.yieldData.cash.toFixed(2) + '%',
     );
     if (showStockYield) {
-      lines.push('股票殖利率: ' + d.yieldData.stock.toFixed(2) + '%');
+      lines.push('股票殖利率：' + d.yieldData.stock.toFixed(2) + '%');
     }
     lines.push(
-      '總殖利率: ' + d.yieldData.total.toFixed(2) + '%',
+      '總殖利率：' + d.yieldData.total.toFixed(2) + '%',
       '─────────────',
-      '現金股利收入: ' + fmtMoney(d.cashIncome.gross),
+      '現金股利收入：' + fmtMoney(d.cashIncome.gross),
     );
     if (showFee) {
-      lines.push('二代健保補充保費: -' + fmtMoney(d.cashIncome.healthIns));
+      lines.push('二代健保補充保費：-' + fmtMoney(d.cashIncome.healthIns));
       if (hasStockGross) {
-        lines.push('  (合計給付: 現金 ' + fmtMoney(d.cashIncome.gross) +
+        lines.push('  （補充保費計算基礎：現金 ' + fmtMoney(d.cashIncome.gross) +
           ' + 股票面額 ' + fmtMoney(d.cashIncome.stockGross) +
-          ' = ' + fmtMoney(d.cashIncome.totalGross) + ')');
+          ' = ' + fmtMoney(d.cashIncome.totalGross) + '）');
       }
     }
-    lines.push('實領現金: ' + fmtMoney(d.cashIncome.net));
+    lines.push('實領現金：' + fmtMoney(d.cashIncome.net));
     if (showStockAlloc) {
       lines.push(
-        '配股數: ' + fmtNum(d.stockAlloc.allocated, 2) + ' 股',
-        '配股後總股數: ' + fmtNum(d.stockAlloc.totalShares, 2) + ' 股',
-        '  (整股/畸零股: ' + fmtNum(d.stockAlloc.wholeShares, 0) +
-          ' 整股 + ' + d.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股)',
+        '配股數：' + fmtNum(d.stockAlloc.allocated, 2) + ' 股',
+        '配股後總股數：' + fmtNum(d.stockAlloc.totalShares, 2) + ' 股',
+        '  （' + fmtNum(d.stockAlloc.wholeShares, 0) +
+          ' 整股 + ' + d.stockAlloc.fractionalShares.toFixed(2) + ' 畸零股）',
       );
     }
     if (showCostRed) {
       lines.push(
-        '除權息後總持有成本: ' + fmtMoney(d.costRed.newCostTotal),
-          '  (每股 NT$ ' + d.costRed.newCostPerShare.toFixed(2) +
-          ',降 NT$ ' + d.costRed.costReduction.toFixed(2) +
-          '/股 (' + d.costRed.costReductionPct.toFixed(2) + '%))',
+        '除權息後總持有成本：' + fmtMoney(d.costRed.newCostTotal),
+          '  （每股 NT$ ' + d.costRed.newCostPerShare.toFixed(2) +
+          '，每股降低 NT$ ' + d.costRed.costReduction.toFixed(2) +
+          '，降幅 ' + d.costRed.costReductionPct.toFixed(2) + '%）',
       );
     }
     const netA = d.taxData.methodA.netTax;
     const netAStr = netA < -0.5 ? '退稅 ' + fmtMoney(Math.abs(netA)) : fmtMoney(netA);
     lines.push(
       '─────────────',
-      '邊際稅率: ' + (d.marginalRate * 100).toFixed(0) + '%',
-      'A. 合併課稅 (8.5% 抵減) 淨稅: ' + netAStr,
-      'B. 分離課稅 (28%) 淨稅: ' + fmtMoney(d.taxData.methodB.netTax),
-      '推薦方案: ' + (d.taxData.better === 'A' ? 'A 合併課稅' : 'B 分離課稅'),
+      '邊際稅率：' + (d.marginalRate * 100).toFixed(0) + '%',
+      'A. 合併課稅 (8.5% 抵減) 淨增加稅額：' + netAStr,
+      'B. 分離課稅 (28%) 應納稅額：' + fmtMoney(d.taxData.methodB.netTax),
+      '較省稅方案：' + (d.taxData.better === 'A' ? 'A. 合併課稅' : 'B. 分離課稅'),
     );
     return lines.join('\n');
   }
 
   // ============================================================
-  // 快捷:對齊損益兩平 / 套用目標報酬
+  // 快速設定價格:設為損益兩平價 / 套用目標報酬
   // ============================================================
   // snap 函數適配多筆買進
   //   做多: 修改 sellPrice (不變)
@@ -1340,35 +1474,35 @@
     const { sharesPerUnit, productType, discount, minFee, taxRate, borrowEffRate } = inp;
     const buyAgg = calcMultiBuy(buyEntries, sharesPerUnit, discount, minFee, taxRate);
     const shares = buyAgg.totalShares;
-    if (shares <= 0) return toast('請先輸入有效的買進列表', true);
+    if (shares <= 0) return toast('請先輸入有效的價格與數量', true);
 
     if (direction === 'short') {
       const sell = calcSide(inp.sellPrice, shares, discount, minFee, taxRate, borrowEffRate, true);
       const netSell = round2(sell.amount - sell.fee - sell.tax - sell.borrowFee);
       const be = calcBreakeven({ netSell, shares, discount, minFee, taxRate, dir: 'short' });
-      if (be <= 0) return toast('無法對齊到損益兩平', true);
+      if (be <= 0) return toast('無法計算損益兩平價，請檢查輸入', true);
       const { value, decimals } = snapPriceToTick(be, productType, 'short');
       buyEntries[0].price = parseFloat(value.toFixed(decimals));
       renderBuyList();
     } else {
       const be = calcBreakeven({ totalCost: buyAgg.totalCost, shares, discount, minFee, taxRate, dir: 'long' });
-      if (be <= 0) return toast('無法對齊到損益兩平', true);
+      if (be <= 0) return toast('無法計算損益兩平價，請檢查輸入', true);
       const { value, decimals } = snapPriceToTick(be, productType, 'long');
       $('sellPrice').value = value.toFixed(decimals);
     }
     calculate();
     saveSettings();
-    toast('已對齊到損益兩平價');
+    toast(direction === 'short' ? '已將回補價設為損益兩平價' : '已將賣價設為損益兩平價');
   }
 
   function snapToTarget() {
     const inp = readInputs();
     const { sharesPerUnit, productType, discount, minFee, taxRate, borrowEffRate } = inp;
     const targetPct = parseFloat($('targetReturn').value);
-    if (!isFinite(targetPct)) return toast('請輸入有效的目標報酬率', true);
+    if (!isFinite(targetPct)) return toast('請輸入目標報酬率', true);
     const buyAgg = calcMultiBuy(buyEntries, sharesPerUnit, discount, minFee, taxRate);
     const shares = buyAgg.totalShares;
-    if (shares <= 0) return toast('請先輸入有效的買進列表', true);
+    if (shares <= 0) return toast('請先輸入有效的價格與數量', true);
     const targetRate = targetPct / 100;
 
     if (direction === 'short') {
@@ -1378,7 +1512,7 @@
         netSell, sellAmount: sell.amount, shares, discount, minFee, taxRate,
         dir: 'short', targetRate,
       });
-      if (price <= 0) return toast('目標報酬無法達成', true);
+      if (price <= 0) return toast('無法達成這個目標報酬，請調整數值', true);
       const { value, decimals } = snapPriceToTick(price, productType, 'short');
       buyEntries[0].price = parseFloat(value.toFixed(decimals));
       renderBuyList();
@@ -1387,7 +1521,7 @@
         totalCost: buyAgg.totalCost, shares, discount, minFee, taxRate,
         dir: 'long', targetRate,
       });
-      if (price <= 0) return toast('目標報酬無法達成', true);
+      if (price <= 0) return toast('無法達成這個目標報酬，請調整數值', true);
       const { value, decimals } = snapPriceToTick(price, productType, 'long');
       $('sellPrice').value = value.toFixed(decimals);
     }
@@ -1407,11 +1541,13 @@
     direction = DEFAULTS.direction;
     unit = DEFAULTS.unit;
     productType = DEFAULTS.productType;
+    shortType = DEFAULTS.shortType;
     rangeRowsHalf = RANGE_HALF_DEFAULT;
     buyEntries = cloneDefaultBuyEntries();
     $('sellPrice').value    = DEFAULTS.sellPrice;
     $('discount').value     = DEFAULTS.discount;
     $('minFee').value       = DEFAULTS.minFee;
+    $('marginRate').value   = DEFAULTS.marginRate;
     $('borrowRate').value   = DEFAULTS.borrowRate;
     $('borrowDays').value   = DEFAULTS.borrowDays;
     $('targetReturn').value = DEFAULTS.targetReturn;
@@ -1425,8 +1561,8 @@
   function showResetConfirm() {
     const isDividend = appMode === 'dividend';
     const mainText = isDividend
-      ? '將清除進階設定(健保費率、起徵點、綜合所得淨額)、股價、股利、持股數量與買進成本，並還原為預設值。'
-      : '將清除進階設定(手續費設定)、商品類型、交易方向、所有輸入欄位與區間試算的範圍顯示設定，並還原為預設值。';
+      ? '除權息試算的所有欄位與設定（健保費率、起徵點、綜合所得淨額、股價、股利、持股與買進均價）將還原為預設值。'
+      : '交易試算的所有欄位與設定（手續費折扣、證交稅率、交易方向、做空方式、區間顯示範圍）將還原為預設值。';
     const infoText = isDividend
       ? '交易試算的資料不受影響。'
       : '除權息試算的資料不受影響。';
@@ -1444,58 +1580,84 @@
 
   function buildReportText() {
     const d = lastTradeData;
-    if (!d) return '(尚未計算)';
+    if (!d) return '（尚未計算）';
     const isShort = d.direction === 'short';
     const unitLabel = d.unit === 'lot' ? '張' : '股';
+    const L = SIDE_LABELS[isShort ? 'short' : 'long'];
+    const needsBorrow = shortNeedsBorrow(d.direction, d.productType);
     const buyLabel  = isShort ? '回補' : '買進';
-    const sellLabel = isShort ? '放空價格 (元)' : '賣出價格 (元)';
-    const breakevenLabel = isShort ? '損益兩平回補價' : '損益兩平賣價';
+    const sellLabel = isShort ? '放空價格' : '賣出價格';   // 值後面已帶「元」,標籤不再加 (元)
+    const breakevenLabel = L.breakeven;
+    const shortHow = needsBorrow ? (SHORT_TYPE_LABELS[d.shortType] || '融券') : '現股當沖';
     const sharePrice = px => 'NT$ ' + px.toFixed(2);
     const profitSign = n => (n > 0 ? '+' : '') + fmtMoney(n);
     const rrSign     = r => (r > 0 ? '+' : '') + (isFinite(r) ? r.toFixed(2) : '0.00') + '%';
     const lines = [
       '台股交易計算結果',
       '─────────────',
-      '方向: ' + (isShort ? '做空 (融券)' : '做多'),
-      buyLabel + '列表 (共 ' + d.buyEntries.length + ' 筆):',
+      '方向：' + (isShort ? '做空（' + shortHow + '）' : '做多'),
+      buyLabel + '列表（共 ' + d.buyEntries.length + ' 筆）：',
     ];
     d.buyEntries.forEach((e, i) => {
       const num = ENTRY_NUMERALS[i] || ('(' + (i + 1) + ')');
       lines.push('  ' + num + ' ' + e.price + ' 元 × ' + e.qty + ' ' + unitLabel);
     });
     lines.push(
-      sellLabel + ': ' + d.sellPriceInput + ' 元',
-      '證交稅率: ' + (PRODUCT_LABELS[d.productType] || d.productType),
-      '手續費折扣: ' + formatDiscount(d.discount) + ' (' + d.discountInput + ')',
+      sellLabel + '：' + d.sellPriceInput + ' 元',
+      '證交稅率：' + (PRODUCT_LABELS[d.productType] || d.productType),
+      '手續費折扣：' + formatDiscount(d.discount) + '（' + d.discountInput + '）',
     );
-    if (isShort) {
-      lines.push('借券: 年化 ' + d.borrowRateInput + '% × ' + d.borrowDaysInput + ' 天');
+    if (needsBorrow) {
+      lines.push(d.shortType === 'sbl'
+        ? '借券費率：年化 ' + d.borrowRateInput + '% × ' + d.borrowDaysInput + ' 天'
+        : '借券費率：' + d.marginRateInput + '%（賣出時一次收取）');
     }
     lines.push(
-      '※' + breakevenLabel + ': ' + (d.breakeven > 0 ? sharePrice(d.breakeven) : '-'),
+      '※ ' + breakevenLabel + '：' + (d.breakeven > 0 ? sharePrice(d.breakeven) : '-'),
       '─────────────',
-      '買進金額: ' + fmtMoney(d.buyAmount),
-      '買進手續費: ' + fmtMoney(d.buyFee),
-      '買進總成本: ' + fmtMoney(d.totalCost),
-      '每股實際成本: ' + (d.shares > 0 ? sharePrice(d.avgCost) : '-'),
-      '賣出金額: ' + fmtMoney(d.sellAmount),
-      '賣出手續費: ' + fmtMoney(d.sellFee),
-      '證交稅: ' + fmtMoney(d.tax),
+      L.buyAmount + '：' + fmtMoney(d.buyAmount),
+      L.buyFee + '：' + fmtMoney(d.buyFee),
+      L.totalCost + '：' + fmtMoney(d.totalCost),
+      '每股實際成本：' + (d.shares > 0 ? sharePrice(d.avgCost) : '-'),
+      L.sellAmount + '：' + fmtMoney(d.sellAmount),
+      L.sellFee + '：' + fmtMoney(d.sellFee),
+      '證交稅：' + fmtMoney(d.tax),
     );
-    if (isShort) lines.push('借券費: ' + fmtMoney(d.borrowFee));
+    if (needsBorrow) lines.push('借券費：' + fmtMoney(d.borrowFee));
     lines.push(
-      '賣出淨收入: ' + fmtMoney(d.netSell),
-      '每股實際淨收: ' + (d.shares > 0 ? sharePrice(d.netPerShare) : '-'),
+      L.netSell + '：' + fmtMoney(d.netSell),
+      '每股實際淨收入：' + (d.shares > 0 ? sharePrice(d.netPerShare) : '-'),
       '─────────────',
-      '損益: ' + profitSign(d.profit),
-      '報酬率: ' + rrSign(d.returnRate),
-      '總交易成本: ' + fmtMoney(d.totalFees),
+      '損益：' + profitSign(d.profit),
+      '報酬率：' + rrSign(d.returnRate),
+      '總交易成本：' + fmtMoney(d.totalFees),
     );
     return lines.join('\n');
   }
 
+  // 觸控裝置且支援 Web Share → 「複製結果」改為「分享結果」(可直接分享到 LINE 等);桌面維持複製
+  //   分享由系統分享面板處理,本工具本身仍不發任何網路請求
+  const CAN_SHARE = typeof navigator.share === 'function' && matchMedia('(pointer: coarse)').matches;
+  function setupShareButton() {
+    if (!CAN_SHARE) return;
+    const btn = $('copyBtn');
+    btn.setAttribute('data-share', '');
+    btn.title = '分享結果';
+    $('copyBtnLabel').textContent = '分享結果';
+  }
+
   async function copyResult() {
     const text = appMode === 'dividend' ? buildDividendReportText() : buildReportText();
+    if (CAN_SHARE) {
+      try {
+        // 只傳內文:LINE 等 App 會把 title 與 text 接在一起,造成「台股交易計算機」與報告標題重複
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;   // 使用者自己關掉分享面板
+        // 其他錯誤 (權限、不支援的內容…) → 退回複製
+      }
+    }
     try {
       await navigator.clipboard.writeText(text);
       toast('已複製到剪貼簿');
@@ -1508,12 +1670,10 @@
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    try {
-      document.execCommand('copy');
-      toast('已複製到剪貼簿');
-    } catch (_) {
-      toast('複製失敗，請手動選取結果', true);
-    }
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (_) {}
+    if (copied) toast('已複製到剪貼簿');
+    else toast('無法複製，瀏覽器未允許使用剪貼簿', true);
     document.body.removeChild(ta);
   }
 
@@ -1531,7 +1691,7 @@
   // ============================================================
   function saveSettings() {
     try {
-      const data = { buyEntries, direction, unit, productType };
+      const data = { buyEntries, direction, unit, productType, shortType };
       PERSIST_DOM_KEYS.forEach(k => { if ($(k)) data[k] = $(k).value; });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (_) {}
@@ -1544,6 +1704,10 @@
       if (data.direction === 'long' || data.direction === 'short') direction = data.direction;
       if (data.unit === 'lot' || data.unit === 'share') unit = data.unit;
       if (data.productType && TAX_RATES[data.productType] !== undefined) productType = data.productType;
+      if (data.shortType === 'margin' || data.shortType === 'sbl') shortType = data.shortType;
+      // v1.5.0 以前沒有做空方式,borrowRate 是「年化 0.08%」的舊預設 (其實是融券費率):
+      // 舊資料不帶回這個值,借券 (SBL) 年化費率改用新預設 1%
+      if (data.shortType === undefined && String(data.borrowRate) === '0.08') delete data.borrowRate;
       PERSIST_DOM_KEYS.forEach(k => {
         if (data[k] !== undefined && data[k] !== null && data[k] !== '' && $(k)) $(k).value = data[k];
       });
@@ -1600,11 +1764,19 @@
   // ============================================================
   // 事件綁定
   // ============================================================
-  ['sellPrice', 'discount', 'minFee', 'borrowRate', 'borrowDays'].forEach(id => {
+  ['sellPrice', 'discount', 'minFee', 'marginRate', 'borrowRate', 'borrowDays'].forEach(id => {
     $(id).addEventListener('input',  () => { scheduleCalculate(); scheduleSave(); });
     $(id).addEventListener('change', () => { scheduleCalculate(); scheduleSave(); });
   });
   $('targetReturn').addEventListener('input', () => { scheduleSave(); validateInputs(); });
+  // ± 切換目標報酬正負號 (iOS 小數鍵盤無負號可打)
+  $('targetReturnSign').addEventListener('click', () => {
+    const el = $('targetReturn');
+    const v = parseFloat(el.value);
+    if (!isFinite(v) || v === 0) return;
+    el.value = String(-v);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 
   // 買進列表 event delegation (input 改值 + 刪除按鈕)
   $('buyList').addEventListener('input', e => {
@@ -1656,11 +1828,22 @@
     saveSettings();
   });
 
+  // 做空方式切換 (融券 / 借券 SBL)
+  $('shortTypeGroup').addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    shortType = e.target.dataset.shortType;
+    syncToggleGroups();
+    updateDirectionUI();
+    calculate();
+    saveSettings();
+  });
+
   $('productTypeGroup').addEventListener('click', e => {
     if (e.target.tagName !== 'BUTTON') return;
     productType = e.target.dataset.product;
     syncToggleGroups();
-    renderBuyList();   // 商品類型變更會改變 tick,要重新 render entry 的 step
+    updateDirectionUI();   // 現股當沖做空不需借券,借券欄位要跟著顯示 / 隱藏
+    renderBuyList();   // 證交稅率 (商品) 變更會改變 tick,要重新 render entry 的 step
     calculate();
     saveSettings();
   });
@@ -1703,11 +1886,21 @@
   }
 
   // 齒輪 popover 開合
+  // 手機 / 觸控裝置的遮罩:有任何 popover 開著才顯示 (桌面版 CSS 不顯示遮罩)
+  function syncPopoverBackdrop() {
+    const backdrop = $('popoverBackdrop');
+    if (backdrop) backdrop.hidden = !document.querySelector('.popover:not([hidden])');
+  }
   function closeAllPopovers() {
+    // 焦點還在面板內的輸入框就先移除:iOS 點遮罩等非互動區域不會自動失焦,
+    // 否則鍵盤留著、底部結果列 (hidden-by-focus) 也不會回來
+    const active = document.activeElement;
+    if (active && active.closest && active.closest('.popover')) active.blur();
     document.querySelectorAll('.popover').forEach(p => { p.hidden = true; });
     document.querySelectorAll('.gear-btn[aria-expanded="true"]').forEach(b => {
       b.setAttribute('aria-expanded', 'false');
     });
+    syncPopoverBackdrop();
   }
   function togglePopover(btn) {
     const popId = btn.getAttribute('aria-controls');
@@ -1719,6 +1912,7 @@
       pop.hidden = false;
       btn.setAttribute('aria-expanded', 'true');
     }
+    syncPopoverBackdrop();
   }
   document.querySelectorAll('.gear-btn').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -1733,39 +1927,73 @@
     });
   });
   // 點 popover 外側關閉 (不影響齒輪自身的 toggle)
-  document.addEventListener('mousedown', e => {
+  //   pointerdown 同時涵蓋滑鼠與觸控,觸控不必等相容 mousedown
+  //   遮罩改在 click 才關:整個點擊被遮罩吃掉,不會穿透點到下方按鈕
+  document.addEventListener('pointerdown', e => {
     if (e.target.closest('.popover')) return;
     if (e.target.closest('.gear-btn')) return;
+    if (e.target.closest('.popover-backdrop')) return;
     closeAllPopovers();
   });
+  $('popoverBackdrop').addEventListener('click', closeAllPopovers);
   // ESC 關閉 popover (dialog 自己會處理自己的 ESC)
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeAllPopovers();
   });
 
-  // 行動底部結果列 — 點擊滾到結果卡片
+  // 行動底部結果列 — 對應的「重點列」:底部列顯示的就是這一列的數字
+  //   交易/詳細 → 損益列;交易/區間 → 目前價格的損益列;除權息 → 實領現金列
+  function mobileBarTargetId() {
+    if (appMode === 'dividend') return 'dividendNetRow';
+    return activeTab === 'range' ? 'rangeCenterProfitRow' : 'profitRow';
+  }
+
+  // 點擊 → 把重點列捲到畫面中央 (原本捲到結果卡頂端,先看到的是買進金額)
   const mobileBarTap = $('mobileBarTap');
   if (mobileBarTap) {
     mobileBarTap.addEventListener('click', () => {
-      const resultCard = document.querySelector('.layout > .card:nth-child(2)');
-      if (resultCard) resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const row = $(mobileBarTargetId());
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }
 
-  // 行動底部結果列 — 結果卡片進入視窗時自動隱藏 (避免冗餘資訊)
-  function setupMobileBarAutoHide() {
+  // 重點列出現在畫面上時自動隱藏底部列 (資訊重複)
+  //   原本觀察整張結果卡 ≥50%:區間 ±20 時卡片比兩個螢幕還高,永遠達不到 → 底部列不會隱藏
+  //   三個重點列都觀察;隱藏 (display:none) 的列不會相交,所以只有目前模式 / 分頁的那一列有效
+  const _visibleBarTargets = new Set();
+  function refreshMobileBarVisibility() {
     const bar = $('mobileResultBar');
-    const resultCard = document.querySelector('.layout > .card:nth-child(2)');
-    if (!bar || !resultCard || !('IntersectionObserver' in window)) return;
+    if (bar) bar.classList.toggle('hidden-by-scroll', _visibleBarTargets.has(mobileBarTargetId()));
+  }
+  function setupMobileBarAutoHide() {
+    if (!('IntersectionObserver' in window)) return;
     const observer = new IntersectionObserver(entries => {
       entries.forEach(entry => {
-        // 結果卡片 ≥50% 進入視窗才視為「夠看」→ 隱藏底部 bar (使用者可以看到關鍵的損益區塊)
-        bar.classList.toggle('hidden-by-scroll', entry.intersectionRatio > 0.5);
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.6) _visibleBarTargets.add(entry.target.id);
+        else _visibleBarTargets.delete(entry.target.id);
       });
-    }, { threshold: [0, 0.3, 0.5, 0.7] });
-    observer.observe(resultCard);
+      refreshMobileBarVisibility();
+    }, {
+      threshold: [0, 0.6, 1],
+      rootMargin: '0px 0px -84px 0px',   // 扣掉底部列本身的高度:被底部列蓋住不算「看得到」
+    });
+    ['profitRow', 'rangeCenterProfitRow', 'dividendNetRow'].forEach(id => {
+      if ($(id)) observer.observe($(id));
+    });
   }
   setupMobileBarAutoHide();
+
+  // 輸入中 (鍵盤彈出) 隱藏底部列,避免壓在鍵盤上方吃掉可視空間、蓋住正在輸入的欄位
+  //   focusout → 下一個 focusin 之間會短暫沒有焦點,延後一拍再判斷,避免閃爍
+  const isTextEntry = el => !!el && el.matches && el.matches('input, select, textarea');
+  document.addEventListener('focusin', e => {
+    if (isTextEntry(e.target)) $('mobileResultBar').classList.add('hidden-by-focus');
+  });
+  document.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (!isTextEntry(document.activeElement)) $('mobileResultBar').classList.remove('hidden-by-focus');
+    }, 0);
+  });
 
   $('themeBtn').addEventListener('click', cycleTheme);
 
@@ -1808,6 +2036,10 @@
     syncToggleGroups();
     try { localStorage.setItem(RANGE_KEY, String(h)); } catch (_) {}
     renderRangeTable();
+    // 選完範圍就關閉設定面板 (面板裡只有這一個選項);鍵盤操作時焦點還給齒輪,不會遺失
+    const focusWasInside = $('rangeGearPopover').contains(document.activeElement);
+    closeAllPopovers();
+    if (focusWasInside) $('rangeGearBtn').focus({ preventScroll: true });
   });
 
   // ============================================================
@@ -1846,9 +2078,13 @@
 
   // 步進按鈕:單擊 ±step,長按 350ms 後 100ms/次連續
   //   pointer 事件兼容滑鼠與觸控;沿用 input.step / min / max
+  //   觸控:手指放開才算單擊,移動超過容許距離或瀏覽器接手捲動 (pointercancel) 就取消
+  //         → 手指剛好按在按鈕上開始滑動捲頁,不會誤改價格 / 數量
+  //   滑鼠:按下即生效 (維持桌面手感)
   function attachSteppers() {
     const HOLD_DELAY = 350;
     const REPEAT_MS = 100;
+    const MOVE_TOLERANCE = 10;   // px
     document.querySelectorAll('.number-stepper').forEach(wrap => {
       if (wrap.dataset.steppersAttached) return;   // 對動態加入的買進列也可重複呼叫
       wrap.dataset.steppersAttached = '1';
@@ -1857,6 +2093,7 @@
       wrap.querySelectorAll('.stepper-btn').forEach(btn => {
         const dir = btn.dataset.step === 'inc' ? 1 : -1;
         let holdTimer = null, repeatTimer = null;
+        let pressed = false, stepped = false, isMouse = false, startX = 0, startY = 0;
         const doStep = () => {
           if (input.disabled || input.readOnly) return;
           const step = parseFloat(input.step) || 1;
@@ -1875,18 +2112,35 @@
           clearTimeout(holdTimer);
           clearInterval(repeatTimer);
           holdTimer = repeatTimer = null;
+          pressed = false;
           btn.classList.remove('holding');
         };
         btn.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;   // 只處理主要按鍵 / 單指
           e.preventDefault();  // 避免觸控時連動 focus 行為
-          doStep();
+          pressed = true;
+          isMouse = e.pointerType === 'mouse';
+          startX = e.clientX;
+          startY = e.clientY;
+          stepped = false;
           btn.classList.add('holding');
+          if (isMouse) { doStep(); stepped = true; }
           holdTimer = setTimeout(() => {
+            if (!stepped) doStep();   // 觸控長按的第一步;滑鼠已在按下時走過
+            stepped = true;
             repeatTimer = setInterval(doStep, REPEAT_MS);
           }, HOLD_DELAY);
         });
-        // pointer 離開或鬆開都要停止
-        ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(ev =>
+        btn.addEventListener('pointermove', e => {
+          if (!pressed || isMouse) return;
+          if (Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_TOLERANCE) stop();
+        });
+        btn.addEventListener('pointerup', () => {
+          if (pressed && !stepped) doStep();   // 觸控短按:放開才算一次
+          stop();
+        });
+        // 離開、被瀏覽器接手捲動 (pointercancel)、失焦都取消,不補步進
+        ['pointerleave', 'pointercancel', 'blur'].forEach(ev =>
           btn.addEventListener(ev, stop)
         );
         // 鍵盤可訪問:Enter / Space 觸發單擊 (long-press 對鍵盤不適用)
@@ -1904,21 +2158,24 @@
   window.__calc = {
     fmtNum, fmtMoney, round2, getTickSize, formatDiscount,
     calcFee, calcSide, calcBreakeven, calcTargetPrice, snapPriceToTick,
-    calcScenarioProfit, calcMultiBuy,   // // 除權息純函數
+    calcScenarioProfit, calcMultiBuy, calcBorrowEffRate, calcShortBorrowRate,   // // 除權息純函數
     calcExDividendPrice, calcCashDividendIncome, calcStockDividendShares,
     calcFillDividendGain, calcDividendYield, calcCostReduction,
     calcProgressiveTax, calcDividendTax,
     TAX_RATES, FEE_RATE,
     TAX_BRACKETS, DIVIDEND_CREDIT_RATE, DIVIDEND_CREDIT_CAP, DIVIDEND_SEPARATE_RATE,
-    HEALTH_INS_CAP,
+    HEALTH_INS_CAP, RULES, isDaytradeHalfTaxExpired,
   };
 
   // ============================================================
   // 啟動
   // ============================================================
   loadSettings();
+  renderRuleNotes();   // 先寫入法規說明與預設值,再由使用者存檔覆蓋
   loadDividendSettings();
   applyTheme(themeMode);  // 同步 meta theme-color + 按鈕狀態 (CSS 已由 head 內 script 套用)
+  syncAppleTouchIcon();
+  setupShareButton();
   // 還原上次的分頁
   try {
     const savedTab = localStorage.getItem(TAB_KEY);
@@ -1944,6 +2201,7 @@
   switchTab(activeTab);
   saveSettings();   // 確保啟動時舊 schema 立即升到新 schema (含 buyEntries)
   applyMode(appMode);   // 套用初始模式 (含 trade 模式也跑一次,把 layout/footer 對齊)
+  _announceReady = true;   // 之後的變動才播報 (啟動時不念)
 
   // Footer 版本標示
   const versionTag = $('appVersionTag');

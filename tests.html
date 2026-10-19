@@ -59,7 +59,7 @@
 </head>
 <body>
 <h1>Calculator 單元測試</h1>
-<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy / calcExDividendPrice / calcCashDividendIncome / calcStockDividendShares / calcFillDividendGain / calcDividendYield / calcCostReduction / calcProgressiveTax / calcDividendTax)</div>
+<div class="subtitle">驗證 index.html 中的純計算函數 (fmtMoney / calcFee / calcSide / calcBreakeven / calcTargetPrice / snapPriceToTick / getTickSize / calcScenarioProfit / calcMultiBuy / calcBorrowEffRate / calcShortBorrowRate / calcExDividendPrice / calcCashDividendIncome / calcStockDividendShares / calcFillDividendGain / calcDividendYield / calcCostReduction / calcProgressiveTax / calcDividendTax / isDaytradeHalfTaxExpired)</div>
 <div id="summary" class="summary loading">載入中…</div>
 <table>
   <thead>
@@ -75,7 +75,7 @@
 
 <div class="note">
   ※ 此頁透過 iframe 載入 index.html,讀取 <code>window.__calc</code> 暴露的純函數來測試。<br>
-  ※ 涵蓋所有計算邏輯;UI 互動(reset/copy/snap 按鈕、localStorage、滾輪、direction / Tab / 商品類型 切換)需手動驗證。<br>
+  ※ 涵蓋所有計算邏輯;UI 互動(reset/copy/snap 按鈕、localStorage、滾輪、交易方向 / Tab / 證交稅率 / 做空方式切換)需手動驗證;Service Worker 另見 tests/sw.test.js。<br>
   ※ 浮點運算的測試用近似比對 (tol = 1e-3 或 1e-9 依情境)。
 </div>
 
@@ -131,7 +131,7 @@
   function runTests(C) {
     const { fmtNum, fmtMoney, round2, getTickSize, formatDiscount, calcFee, calcSide,
             calcBreakeven, calcTargetPrice, snapPriceToTick, calcScenarioProfit,
-            calcMultiBuy,
+            calcMultiBuy, calcBorrowEffRate, calcShortBorrowRate,
             calcExDividendPrice, calcCashDividendIncome, calcStockDividendShares,
             calcFillDividendGain, calcDividendYield, calcCostReduction,
             calcProgressiveTax, calcDividendTax,
@@ -242,6 +242,38 @@
     {
       const r = calcSide(100, 1000, 1, 20, 0.003, 0.0008 / 365, true);
       assert('短天期 0.219 → floor = 0', r.borrowFee, 0);
+    }
+
+    // ============================================================
+    group('calcBorrowEffRate — 融券 (一次收) / 借券 SBL (年化 × 天數)');
+    // ============================================================
+    assert('融券 0.08% → 0.0008 (與天數無關)', calcBorrowEffRate('margin', 0.08, 1, 30), 0.0008, { approx: true, tol: 1e-12 });
+    assert('融券天數為 0 仍收一次', calcBorrowEffRate('margin', 0.08, 1, 0), 0.0008, { approx: true, tol: 1e-12 });
+    assert('借券 年化 1% × 365 天 → 0.01', calcBorrowEffRate('sbl', 0.08, 1, 365), 0.01, { approx: true, tol: 1e-12 });
+    assert('借券 年化 1% × 30 天 → 0.01 × 30/365', calcBorrowEffRate('sbl', 0.08, 1, 30), 0.01 * 30 / 365, { approx: true, tol: 1e-12 });
+    assert('借券 0 天 → 0', calcBorrowEffRate('sbl', 0.08, 1, 0), 0);
+    assert('負費率視為 0', calcBorrowEffRate('margin', -1, 1, 1), 0);
+    assert('NaN 費率視為 0', calcBorrowEffRate('sbl', 0.08, NaN, 30), 0);
+    {
+      // 融券賣出 100 元 × 1 張:100,000 × 0.08% = 80 (浮點誤差不可捨去成 79)
+      const r = calcSide(100, 1000, 1, 20, 0.003, calcBorrowEffRate('margin', 0.08, 1, 1), true);
+      assert('融券 100k → 借券費 80', r.borrowFee, 80);
+      const r2 = calcSide(123.5, 1000, 1, 20, 0.003, calcBorrowEffRate('margin', 0.08, 1, 1), true);
+      assert('融券 123,500 → 借券費 98 (floor 98.8)', r2.borrowFee, 98);
+    }
+    // 現股當沖證交稅減半期限 (台灣時間當天 23:59:59 前仍有效)
+    assert('減半期限當天仍有效', C.isDaytradeHalfTaxExpired(new Date('2027-12-31T23:00:00+08:00')), false);
+    assert('隔天起視為到期', C.isDaytradeHalfTaxExpired(new Date('2028-01-01T00:00:01+08:00')), true);
+    assert('期限設定為 2027-12-31', C.RULES.daytradeHalfTaxUntil, '2027-12-31');
+    assert('做多不收借券費', calcShortBorrowRate('long', 'stock', 'margin', 0.08, 1, 30), 0);
+    assert('現股當沖做空 (先賣後買) 不收借券費', calcShortBorrowRate('short', 'daytrade', 'margin', 0.08, 1, 30), 0);
+    assert('現股當沖做空選借券也不收', calcShortBorrowRate('short', 'daytrade', 'sbl', 0.08, 1, 30), 0);
+    assert('一般股票做空 → 融券費率', calcShortBorrowRate('short', 'stock', 'margin', 0.08, 1, 30), 0.0008, { approx: true, tol: 1e-12 });
+    assert('ETF 做空 → 借券費率', calcShortBorrowRate('short', 'etf', 'sbl', 0.08, 1, 365), 0.01, { approx: true, tol: 1e-12 });
+    {
+      // 借券 100,000 × 1% × 30/365 = 82.19 → 82
+      const r = calcSide(100, 1000, 1, 20, 0.003, calcBorrowEffRate('sbl', 0.08, 1, 30), true);
+      assert('借券 100k × 1% × 30 天 → 82', r.borrowFee, 82);
     }
 
     // ============================================================
@@ -427,7 +459,7 @@
     }
 
     // ============================================================
-    group('calcMultiBuy — A1 多筆加碼買進聚合');
+    group('calcMultiBuy — 多筆買進聚合');
     // ============================================================
     {
       // 1) 單筆等同 calcSide
@@ -680,14 +712,19 @@
     assert('股價 0 → 全 0', calcDividendYield(3, 1, 0).total, 0);
 
     // ============================================================
-    group('calcProgressiveTax — 累進綜所稅 (台灣 2024 年度級距)');
+    group('calcProgressiveTax — 累進綜所稅 (台灣 2025 年度級距)');
     // ============================================================
+    // 對照財政部速算公式:淨額 × 稅率 − 累進差額 (0 / 41,300 / 147,700 / 413,700 / 911,700)
     assert('0 → 0', calcProgressiveTax(0), 0);
     assert('100k 全 5% → 5,000', calcProgressiveTax(100000), 5000);
     assert('590k → 29,500 (5% 上限)', calcProgressiveTax(590000), 29500);
     assert('600k 跨入 12% → 30,700', calcProgressiveTax(600000), 30700, { approx: true, tol: 0.5 });
     assert('1.5M 跨入 20% → 152,300', calcProgressiveTax(1500000), 152300, { approx: true, tol: 0.5 });
+    assert('4.98M → 1,080,300 (30% 上限)', calcProgressiveTax(4980000), 1080300, { approx: true, tol: 1 });
     assert('5M 跨入 40% → 1,088,300', calcProgressiveTax(5000000), 1088300, { approx: true, tol: 1 });
+    // 最高稅率 40% 無上限 (107 年度起已取消 45%);舊版誤設 7.47M 以上 45% 會得 3,214,800
+    assert('7.47M → 2,076,300', calcProgressiveTax(7470000), 2076300, { approx: true, tol: 1 });
+    assert('10M 仍 40% → 3,088,300', calcProgressiveTax(10000000), 3088300, { approx: true, tol: 1 });
 
     // ============================================================
     group('calcCostReduction — 除權息後每股成本降低');
@@ -749,7 +786,7 @@
       assert('低所得族群 → A 較優', r.better, 'A');
     }
     {
-      // 股利 1M + 其他所得 5M → 加進去後 6M 仍在 40% 級距 (≤ 7.47M)
+      // 股利 1M + 其他所得 5M → 加進去前後都在 40% 級距
       // A: addTax = 1M × 40% = 400,000;抵減觸頂 80,000;netA = 320,000
       // B: 1M × 28% = 280,000
       const r = calcDividendTax(1000000, 5000000);
@@ -757,6 +794,24 @@
       assert('A 增加稅 400,000', r.methodA.additionalTax, 400000, { approx: true, tol: 1 });
       assert('B 280,000', r.methodB.netTax, 280000);
       assert('高所得族群 → B 較優', r.better, 'B');
+    }
+    {
+      // 跨 30% → 40% 邊界:股利 1M + 其他所得 4.5M → 5.5M
+      // A: addTax = 480k × 30% + 520k × 40% = 144,000 + 208,000 = 352,000;抵減 80,000;netA = 272,000
+      // B: 1M × 28% = 280,000 → A 較優
+      const r = calcDividendTax(1000000, 4500000);
+      assert('跨 4.98M:A 增加稅 352,000', r.methodA.additionalTax, 352000, { approx: true, tol: 1 });
+      assert('跨 4.98M:A 淨 272,000', r.methodA.netTax, 272000, { approx: true, tol: 1 });
+      assert('跨 4.98M → A 較優', r.better, 'A');
+    }
+    {
+      // 超過 7.47M 仍為 40%:股利 3M + 其他所得 5M → 8M
+      // A: addTax = 3M × 40% = 1,200,000 (舊版誤用 45% 會得 1,226,500);抵減 80,000;netA = 1,120,000
+      // B: 3M × 28% = 840,000
+      const r = calcDividendTax(3000000, 5000000);
+      assert('8M:A 增加稅 1,200,000 (無 45% 級距)', r.methodA.additionalTax, 1200000, { approx: true, tol: 1 });
+      assert('8M:A 淨 1,120,000', r.methodA.netTax, 1120000, { approx: true, tol: 1 });
+      assert('8M:B 840,000', r.methodB.netTax, 840000, { approx: true, tol: 1e-6 });
     }
     assert('0 股利 → 兩方案皆 0', calcDividendTax(0, 500000).methodA.netTax, 0);
   }
